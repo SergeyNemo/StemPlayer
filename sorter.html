@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StemPlayer — Обработка</title>
+    <link rel="stylesheet" href="assets/css/base.css">
+    <link rel="stylesheet" href="assets/css/components.css">
+    <link rel="stylesheet" href="assets/css/table.css">
+</head>
+<body>
+    <div class="app">
+        <header class="header">
+            <div class="brand">
+                <span class="brand-dot"></span>
+                <h1>StemPlayer <small>sorting module</small></h1>
+            </div>
+            <div class="status-badge" id="status-badge" data-state="idle">idle</div>
+        </header>
+
+        <section class="page-head">
+            <h2>Обработка треков</h2>
+            <p id="page-subtitle">Проанализируйте BPM и тональность, а затем треки автоматически разложатся по папкам.</p>
+        </section>
+
+        <!-- Состояние 1: inbox пуст -> загрузка -->
+        <section class="upload-zone" id="upload-zone">
+            <div class="dropzone" id="dropzone" tabindex="0">
+                <div class="dz-icon">&#9834;</div>
+                <p class="dz-title">Папка inbox пуста</p>
+                <p class="dz-hint">Перетащите сюда аудиофайлы или нажмите, чтобы выбрать</p>
+                <button class="btn btn-ghost" type="button" id="pick-btn">Выбрать файлы</button>
+                <input type="file" id="file-input" accept=".mp3,.wav,.flac,.ogg,.aac,.m4a,.wma,.aiff,.aif,audio/*" multiple hidden>
+            </div>
+            <div class="upload-progress" id="upload-progress" hidden>
+                <span id="upload-status">Загрузка…</span>
+                <div class="progress-track"><div class="progress-fill" id="upload-fill"></div></div>
+            </div>
+        </section>
+
+        <!-- Состояние 2: inbox не пуст -> таблица -->
+        <section class="tracks-view" id="tracks-view" hidden>
+            <div class="toolbar">
+                <div class="toolbar-left">
+                    <button class="btn btn-primary" id="process-btn" type="button">Обработать</button>
+                    <button class="btn btn-ghost btn-stop" id="stop-btn" type="button" hidden>■ Стоп</button>
+                    <label class="queue-toggle" id="queue-toggle" title="Треки играют по списку друг за другом">
+                        <input type="checkbox" id="queue-check">
+                        <span class="q-slider"></span>
+                        <span class="q-label">Подряд</span>
+                    </label>
+                    <span class="toolbar-meta">
+                        <span id="track-total-text">Треков нет</span>
+                    </span>
+                </div>
+                <div class="overall-progress">
+                    <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+                    <span class="progress-label" id="progress-label">0%</span>
+                </div>
+            </div>
+
+            <div class="banner" id="banner" hidden>
+                <span class="banner-text" id="banner-text"></span>
+                <button class="btn-link" id="banner-folders-toggle" type="button" hidden>Папки ▾</button>
+                <div class="banner-folders" id="banner-folders" hidden></div>
+            </div>
+
+            <div class="table-wrap">
+                <table class="tracks-table">
+                    <thead>
+                        <tr>
+                            <th class="col-num" data-sort="num" title="Сортировать по №">№ <span class="sort-ind"></span></th>
+                            <th class="col-track" data-sort="track" title="Перемешать треки">Трек и исполнитель <span class="sort-ind"></span></th>
+                            <th class="col-center" data-sort="bpm" title="Сортировать по BPM">BPM <span class="sort-ind"></span></th>
+                            <th class="col-center" data-sort="key" title="Сортировать по тональности">Тональность <span class="sort-ind"></span></th>
+                            <th class="col-center" data-sort="duration" title="Сортировать по длительности">Длительность <span class="sort-ind"></span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tracks-tbody"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Диагностический журнал (сворачиваемый) -->
+        <section class="log-panel" id="log-panel">
+            <button class="log-toggle" id="log-toggle" type="button">Журнал <span class="log-caret"></span></button>
+            <div class="console" id="console" hidden></div>
+        </section>
+    </div>
+
+    <script type="module" src="assets/js/main.js"></script>
+</body>
+</html>

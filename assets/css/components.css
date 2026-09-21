@@ -1,0 +1,164 @@
+.header { display: flex; align-items: center; justify-content: space-between; }
+
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-dot {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: repeating-conic-gradient(#fff 0 25%, #000 0 50%);
+    box-shadow: 0 0 12px var(--accent);
+}
+.brand h1 { font-size: 22px; font-weight: 700; letter-spacing: 0.5px; }
+.brand small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+
+.status-badge {
+    padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 600;
+    border: 1px solid var(--panel-border); text-transform: uppercase; letter-spacing: 1px;
+    background: var(--panel); color: var(--muted);
+    display: inline-flex; align-items: center; gap: 8px;
+}
+.status-badge::before {
+    content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted);
+}
+.status-badge[data-state="running"] { color: var(--info); border-color: var(--info); }
+.status-badge[data-state="running"]::before { background: var(--info); animation: blink 1s infinite; }
+.status-badge[data-state="complete"] { color: var(--success); border-color: var(--success); }
+.status-badge[data-state="complete"]::before { background: var(--success); }
+.status-badge[data-state="error"] { color: var(--error); border-color: var(--error); }
+.status-badge[data-state="error"]::before { background: var(--error); }
+.status-badge[data-state="stopped"] { color: var(--warning, #f5a623); border-color: var(--warning, #f5a623); }
+.status-badge[data-state="stopped"]::before { background: var(--warning, #f5a623); }
+
+.page-head h2 { font-size: 20px; color: var(--text); }
+.page-head p { color: var(--muted); font-size: 13.5px; margin-top: 4px; }
+
+/* ---------- Кнопки ---------- */
+.btn {
+    padding: 11px 26px; border: none; border-radius: 10px; cursor: pointer;
+    font-size: 14.5px; font-weight: 700; letter-spacing: 0.4px; transition: 0.15s ease;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--accent-hover); transform: translateY(-1px); }
+.btn-ghost {
+    background: transparent; color: var(--text);
+    border: 1px solid var(--panel-border);
+}
+.btn-ghost:hover { background: var(--panel-2); }
+.btn-stop {
+    padding: 9px 16px; font-size: 13px; border-radius: 9px;
+    border: 1px solid rgba(210, 153, 34, 0.55); color: var(--warning);
+}
+.btn-stop:hover:not(:disabled) { background: rgba(210, 153, 34, 0.12); }
+.btn-stop:disabled { opacity: 0.6; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-link {
+    background: none; border: none; cursor: pointer;
+    color: var(--info); font-size: 13px; padding: 2px 6px;
+}
+
+/* ---------- Прогресс ---------- */
+.progress-track {
+    height: 10px; border-radius: 999px; background: #010409;
+    border: 1px solid var(--panel-border); overflow: hidden;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,.6);
+}
+.progress-fill {
+    height: 100%; width: 0%; border-radius: 999px;
+    background: linear-gradient(90deg, var(--accent), var(--info));
+    box-shadow: 0 0 12px rgba(124,92,255,.55);
+    transition: width 0.4s ease;
+}
+.progress-fill.is-running {
+    background: linear-gradient(90deg, var(--accent), var(--info), var(--accent));
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+}
+
+.overall-progress {
+    display: flex; align-items: center; gap: 12px; flex: 1; max-width: 420px;
+}
+.overall-progress .progress-track { flex: 1; height: 14px; }
+.overall-progress .progress-label {
+    min-width: 96px; text-align: right;
+    font-family: var(--mono); font-weight: 700; font-size: 13px; color: var(--info);
+}
+
+/* ---------- Загрузка ---------- */
+.upload-zone { display: flex; flex-direction: column; gap: 14px; }
+.dropzone {
+    border: 2px dashed var(--panel-border); border-radius: 16px;
+    padding: 54px 24px; text-align: center; cursor: pointer;
+    background: var(--panel); transition: 0.15s ease;
+    display: flex; flex-direction: column; align-items: center; gap: 10px;
+}
+.dropzone:hover, .dropzone.dz-over {
+    border-color: var(--accent); background: var(--panel-2);
+}
+.dz-icon { font-size: 44px; color: var(--accent); opacity: 0.85; line-height: 1; }
+.dz-title { font-size: 18px; font-weight: 700; }
+.dz-hint { color: var(--muted); font-size: 13.5px; }
+.upload-progress {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px; border-radius: 12px;
+    background: var(--panel); border: 1px solid var(--panel-border);
+}
+.upload-progress span { font-size: 13px; color: var(--muted); min-width: 140px; }
+.upload-progress .progress-track { flex: 1; }
+
+/* ---------- Журнал ---------- */
+.log-panel { border: 1px solid var(--panel-border); border-radius: 12px; background: var(--panel); overflow: hidden; }
+.log-toggle {
+    width: 100%; background: none; border: none; cursor: pointer;
+    padding: 12px 16px; text-align: left;
+    color: var(--muted); font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;
+    display: flex; align-items: center; gap: 8px;
+}
+.log-toggle:hover { background: var(--panel-2); }
+.log-caret { transition: transform 0.2s; }
+.log-toggle.is-open .log-caret { transform: rotate(180deg); }
+
+.console {
+    max-height: 260px; overflow-y: auto; background: #010409;
+    border-top: 1px solid var(--panel-border);
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.55; padding: 10px;
+    scroll-behavior: smooth;
+}
+.console::-webkit-scrollbar, .banner-folders::-webkit-scrollbar { width: 8px; }
+.console::-webkit-scrollbar-thumb, .banner-folders::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+
+.log { display: flex; gap: 8px; white-space: pre-wrap; word-break: break-word; }
+.log + .log { margin-top: 4px; }
+.log .time { color: #484f58; flex-shrink: 0; }
+.log .badge {
+    flex-shrink: 0; min-width: 64px; text-align: center; border-radius: 4px; padding: 0 4px;
+    font-weight: 700; font-size: 11px; align-self: flex-start; margin-top: 2px;
+}
+.badge-info { background: rgba(88,166,255,.15); color: var(--info); }
+.badge-success { background: rgba(63,185,80,.15); color: var(--success); }
+.badge-error { background: rgba(248,81,73,.15); color: var(--error); }
+.badge-warning { background: rgba(210,153,34,.15); color: var(--warning); }
+
+/* ---------- Тумблер очереди (в стиле Apple) ---------- */
+.queue-toggle {
+    display: inline-flex; align-items: center; gap: 9px;
+    cursor: pointer; user-select: none; height: 30px;
+}
+.queue-toggle input {
+    position: absolute; opacity: 0; width: 0; height: 0;
+}
+.q-slider {
+    position: relative; width: 42px; height: 24px; border-radius: 999px;
+    background: #2b313b; border: 1px solid var(--panel-border);
+    transition: background .2s ease, border-color .2s ease; flex: 0 0 auto;
+}
+.q-slider::after {
+    content: ""; position: absolute; top: 1px; left: 1px;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.4);
+    transition: transform .2s ease;
+}
+.queue-toggle input:checked + .q-slider {
+    background: var(--success); border-color: var(--success);
+}
+.queue-toggle input:checked + .q-slider::after { transform: translateX(18px); }
+.queue-toggle input:focus-visible + .q-slider { box-shadow: 0 0 0 3px rgba(88,166,255,.4); }
+.q-label { color: var(--muted); font-size: 13px; font-weight: 600; transition: color .2s ease; }
+.queue-toggle input:checked ~ .q-label { color: var(--text); }
