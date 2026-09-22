@@ -4,7 +4,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const JS_DIR = path.join(__dirname, '..', 'assets', 'js');
+// Модуль «Обработка» (analysis): его страница и ассеты живут внутри analysis/.
+const JS_DIR = path.join(__dirname, '..', 'analysis', 'assets', 'js');
 const OUTPUT = path.join(JS_DIR, 'sorter.min.js');
 
 // Порядок важен: сначала модули без зависимостей.

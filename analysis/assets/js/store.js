@@ -42,6 +42,6 @@ const state = {
     play: { audio: null, name: null },
 };
 
-const api = { base: 'api.php' };
+const api = { base: 'analysisApi.php' };
 
 export { POLL_INTERVAL, TERMINAL_STATES, $, els, state, api };

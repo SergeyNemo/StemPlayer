@@ -67,7 +67,7 @@ function togglePlay(name) {
         resetPlayBar(state.play.name);
     }
 
-    const url = `music/inbox/${encodeURIComponent(name)}`;
+    const url = `../music/inbox/${encodeURIComponent(name)}`;
     state.play.name = name;
     audio.src = url;
     audio.play().catch((err) => {

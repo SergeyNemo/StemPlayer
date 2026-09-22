@@ -1,6 +1,6 @@
 # StemPlayer — техническая документация
 
-Внутреннее устройство модуля «Обработка»: архитектура, потоки данных, контракты API, ключевые решения и замечания по поводу специфики Windows.
+Внутреннее устройство: архитектура «ядро + модули», потоки данных, контракты API, ключевые решения и замечания по поводу специфики Windows. Пока реализован один модуль — «Обработка» (`analysis/`).
 
 ---
 
@@ -10,83 +10,89 @@
 
 ```
 ┌─────────────────────┐   HTTP/SSE   ┌──────────────────────┐
-│   Фронтенд          │ ───────────► │   API-слой           │
-│   assets/js (ESM)   │              │   api.php            │
-│   assets/css/*.css  │ ◄─────────── │   classes/*.php      │
-└─────────────────────┘              └──────────┬───────────┘
-                                                │ proc_open
-                                                ▼
-                                       ┌──────────────────────┐
-                                       │   scripts/analyzer.py │
-                                       │   (librosa, numpy,   │
-                                       │    mutagen)          │
-                                       └──────────────────────┘
+│   Фронтенд          │ ───────────► │   API-слой модуля     │
+│   analysis/assets/js│              │   analysis/           │
+│   (ESM)             │              │   analysisApi.php     │
+│   analysis/assets/  │ ◄─────────── │   analysis/classes/   │
+│   css/*.css         │              └──────────┬───────────┘
+└─────────────────────┘                         │ proc_open
+                                                 ▼
+                              ┌──────────────────────────────┐
+                              │  core/PythonRunner.php        │
+                              │  ──► analysis/scripts/analyzer.py
+                              │      (librosa, numpy, mutagen) │
+                              └──────────────────────────────┘
 ```
 
 - **Фронтенд** — девять ES-модулей без сторонних зависимостей (ни jQuery, ни bundler'а в рантайме). Страница работает только по HTTP(S), не по `file://`.
-- **API** — один front-контроллер `api.php` с роутером `match($action)`. Тяжёлая логика вынесена в классы каталога `classes/`.
+- **API** — у каждого модуля свой front-контроллер `{модуль}Api.php` с роутером `match($action)`. Тяжёлая логика вынесена в классы каталога модуля; всё переиспользуемое — в `core/`.
+- **Ядро** (`core/`) — `Http` (JSON/SSE), `ProgressStore` (состояние), `PythonRunner` (запуск python). Модули не знают друг о друге, ядро не знает о модулях.
 - **Анализ** — внешний Python-процесс. PHP никогда не прикасается к аудио: вся DSP живёт в `analyzer.py`.
 
 Принципиальные решения:
 
-1. **Прогресс — через файл, а не через pipe.** На Windows неблокирующее чтение `stderr`-пайпа прозрачно блокируется, пока дочерний процесс не закрыл канал: события "замерзают" до конца анализа. Поэтому `analyzer.py` пишет живой прогресс в JSON-файл (атомарно через `os.replace`), а PHP опрашивает его в цикле `proc_get_status`.
+1. **Прогресс — через файл, а не через pipe.** На Windows неблокирующее чтение `stderr`-пайпа прозрачно блокируется, пока дочерний процесс не закрыл канал: события "замерзают" до конца анализа. Поэтому `analyzer.py` пишет живой прогресс в JSON-файл (атомарно через `os.replace`), а `PythonRunner` опрашивает его в цикле `proc_get_status`.
 2. **Не передавать `$_SERVER` как окружение в `proc_open`.** На Windows PHP искажает окружение дочернего процесса — python перестаёт находиться. `env` не передаётся вовсе, окружение наследуется.
 3. **Атомарная запись состояния.** `ProgressStore` пишет во временный файл и переименовывает: читатель никогда не увидит "обрезанный" JSON; flock-гандикап на чтение не нужен.
 4. **SSE работает только на Apache.** `php -S` однопоточный — второй параллельный запрос (поллинг прогресса) встанет в очередь за стримом. В `.htaccess`/коде выключены gzip, `zlib.output_compression` и `X-Accel-Buffering`.
-5. **Остановка — кооперативная.** Кнопка «Стоп» ставит флаг `stop_requested` в `progress.json`. Цикл анализа проверяет его между треками, `AnalysisService` — во время анализа (терминирует python и его детей через `taskkill /T`). Текущий трек не спасается.
+5. **Остановка — кооперативная.** Кнопка «Стоп» ставит флаг `stop_requested` в `progress.json`. Цикл анализа проверяет его между треками, `PythonRunner` — во время анализа (терминирует python и его детей через `taskkill /T`). Текущий трек не спасается.
 
 ---
 
 ## 2. Дерево проекта и назначение файлов
 
 ```
-index.php              — просто readfile(sorter.html) для адреса http://host/StemPlayer/
-sorter.html            — вся разметка страницы, подключение CSS и <script type="module">
-api.php                — роутер действий + функции-обработчики
+index.php              — посадочная страница со списком модулей (http://host/StemPlayer/)
 config.php             — STEMPLAYER_PYTHON / STEMPLAYER_MAX_EXEC_TIME / STEMPLAYER_AUDIO_EXT
 .htaccess              — upload_max_filesize 300M, post_max_size 310M, max_file_uploads 60, max_execution_time 0
 
-assets/css/
-  base.css             — :root переменные, reset, body, .app, @keyframes shimmer/blink
-  components.css       — header, status-badge, .btn-*, progress-track/fill, dropzone, журнал,
-                         тумблер «Подряд» (.queue-toggle, Apple-стиль)
-  table.css            — тулбар, banner, таблица, колонки, плеер, cell-progress, chips, @media
-  Порядок подключения ВАЖЕН: base → components → table (@media в конце table.css
-  перекрывает правила из первых двух файлов).
-
-assets/js/             (см. раздел 4)
-  main.js              — инициализация
-  store.js             — синглтон-состояние, els, POLL_INTERVAL, TERMINAL_STATES, api.base
-  utils.js             — fetchJson, fmtDuration, setBadge, журнал, buildNameNode
-  player.js            — Audio-плеер в строках таблицы + очередь «Подряд»
-  table.js             — renderTable и обновление строк в реальном времени
-  sort.js              — сортировка/перемешивание по заголовкам
-  views.js             — переключение вью (upload/tracks), баннер по завершении
-  upload.js            — загрузка multipart, refreshInbox
-  analysis.js          — SSE-клиент + фолбэк-поллинг + остановка
-  sorter.min.js        — сборка всех модулей одним файлом (node tools/build.js)
-
-classes/
-  ProgressStore.php    — состояние анализа в storage/progress.json (атомарная запись)
-  AnalysisService.php  — запуск analyzer.py через proc_open + опрос JSON-прогресса
-  AnalysisRunner.php   — общий цикл анализа всех файлов (SSE-стрим и фолбэк)
-  AnalysisInterface.php— контракт runAnalysis
-  TracksIndex.php      — кэш результатов анализа в storage/tracks.json + сборка строк таблицы
-  FileSorter.php       — перекладывание в music/sorted/, безопасные имена папок
-  SortingInterface.php — контракт сортировщика
+core/                  — ядро, общее для всех модулей
   Http.php             — JSON-ответы и SSE-события
-  UploadService.php    — приём multipart-загрузки, санитизация имён, уникализация
+  ProgressStore.php    — состояние анализа в storage/progress.json (атомарная запись)
+  PythonRunner.php     — запуск python через proc_open, опрос JSON-прогресса, кооперативный стоп
 
-scripts/analyzer.py    — Python-анализатор (см. раздел 5)
-tools/build.js         — сборка assets/js/sorter.min.js (Node, модулей 9)
+analysis/              — модуль «Обработка»
+  index.html           — вся разметка страницы, подключение CSS и <script type="module">
+  analysisApi.php      — роутер действий + функции-обработчики
+  assets/css/
+    base.css           — :root переменные, reset, body, .app, @keyframes shimmer/blink
+    components.css     — header, status-badge, .btn-*, progress-track/fill, dropzone, журнал,
+                         тумблер «Подряд» (.queue-toggle, Apple-стиль)
+    table.css          — тулбар, banner, таблица, колонки, плеер, cell-progress, chips, @media
+    Порядок подключения ВАЖЕН: base → components → table (@media в конце table.css
+    перекрывает правила из первых двух файлов).
+  assets/js/           (см. раздел 4)
+    main.js            — инициализация
+    store.js           — синглтон-состояние, els, POLL_INTERVAL, TERMINAL_STATES, api.base
+    utils.js           — fetchJson, fmtDuration, setBadge, журнал, buildNameNode
+    player.js          — Audio-плеер в строках таблицы + очередь «Подряд»
+    table.js           — renderTable и обновление строк в реальном времени
+    sort.js            — сортировка/перемешивание по заголовкам
+    views.js           — переключение вью (upload/tracks), баннер по завершении
+    upload.js          — загрузка multipart, refreshInbox
+    analysis.js        — SSE-клиент + фолбэк-поллинг + остановка
+    sorter.min.js      — сборка всех модулей одним файлом (node tools/build.js)
+  classes/
+    AnalysisService.php— анализ одного файла: вызывает core/PythonRunner, разбирает stdout
+    AnalysisRunner.php — общий цикл анализа всех файлов (SSE-стрим и фолбэк)
+    AnalysisInterface.php— контракт runAnalysis
+    TracksIndex.php    — кэш результатов анализа в storage/tracks.json + сборка строк таблицы
+    FileSorter.php     — перекладывание в music/sorted/, безопасные имена папок
+    SortingInterface.php— контракт сортировщика
+    UploadService.php  — приём multipart-загрузки, санитизация имён, уникализация
+  scripts/analyzer.py  — Python-анализатор (см. раздел 5)
+  music/
+    inbox/             — загруженные треки (источник анализа)
+    sorted/            — результат: BPM128_KeyAm/ и т.п.
+
+tools/build.js         — сборка analysis/assets/js/sorter.min.js (Node, модулей 9)
 
 storage/               — создаётся при первом запуске
   progress.json        — текущий статус/прогресс анализа
   tracks.json          — кэш результатов по именам файлов
-music/
-  inbox/               — загруженные треки (источник анализа)
-  sorted/              — результат: BPM128_KeyAm/ и т.п.
 ```
+
+Все пути в классах — `__DIR__`-относительные: `core/` живёт на уровень выше `analysis/classes/`, поэтому там `../../`. `storage/` и `music/` — общие для всего проекта.
 
 ---
 
@@ -205,7 +211,7 @@ state = {
 **Загрузка** (`upload.js`): FormData → `upload` → `refreshInbox()`. Если файлов нет — вью «загрузка», иначе — таблица.
 
 **Анализ — основной путь** (`analysis.js`):
-`startProcessing()` → `EventSource(api.php?action=stream_analyze)` + `startLivePoll()` (каждые 500 мс `get_progress` как страховка от буферизации). События парсятся и отправляются в `table.js`-функции. На `done` — баннер + `refreshInbox()`.
+`startProcessing()` → `EventSource(analysisApi.php?action=stream_analyze)` + `startLivePoll()` (каждые 500 мс `get_progress` как страховка от буферизации). События парсятся и отправляются в `table.js`-функции. На `done` — баннер + `refreshInbox()`.
 
 **Анализ — фолбэк** (`startPolling(launchAnalysis)`):
 если SSE оборвался (`es.onerror` → `fallbackToPolling` → `startPolling(true)`, однократно запускает `analyze_inbox`), дальше работаем только по `get_progress` каждые `POLL_INTERVAL=2000` мс. Тот же путь, если при загрузке страницы уже идёт анализ в другом окне (`startPolling(false)` — без запуска).
@@ -266,29 +272,36 @@ python analyzer.py <абсолютный путь к треку> [файл-пр�
 
 ## 6. PHP-бэкенд по классам
 
-### `api.php` (роутер)
+### `analysisApi.php` (роутер модуля «Обработка»)
 
-`match($action)` вызывает `handle*`-функции. `ignore_user_abort(true)` и `set_time_limit(STEMPLAYER_MAX_EXEC_TIME)` — чтобы стрим не оборвался при закрытии клиента. Список действий — в README (раздел API).
+`match($action)` вызывает `handle*`-функции. `ignore_user_abort(true)` и `set_time_limit(STEMPLAYER_MAX_EXEC_TIME)` — чтобы стрим не оборвался при закрытии клиента. Список действий — в README (раздел API). Константу `api.base` в `store.js` менять при переименовании API-файла модуля.
 
-### `Http.php`
+### `core/Http.php`
 
 - `sseHeaders()` — gzip off, очистка `ob_*`, `text/event-stream`, `X-Accel-Buffering: no`.
 - `sseEmit(event, payload)` — один `event:`/`data:` блок + `flush()`.
 - `jsonResponse(payload): never` — JSON и `exit`.
 
+### `core/PythonRunner.php`
+
+`run(script, cliArgs, ?onProgress, ?stopCheck): {stdout, stderr, exit_code, terminated}`:
+
+1. Собирает `cmd = [python, script, ...args, progress.json?]`, `cwd = корень проекта`.
+2. `proc_open` без `env` (см. раздел 1, п. 2); pipes переведены в non-blocking.
+3. Цикл: `pollProgressFile` (+ опциональный stopCheck, `usleep(20_000)`), `proc_get_status`.
+4. Остановка → `terminate()` (`taskkill /PID /T /F` на Windows) → `stopped = true`.
+5. После выхода процесса: pipes переведены в blocking, вычитываются stdout/stderr, последний раз опрашивается прогресс-файл.
+6. Временный прогресс-файл и его `.tmp` всегда удаляются в `finally`.
+
 ### `AnalysisService.php`
 
-`runAnalysis(filePath, ?onProgress, ?stopCheck)`:
+`runAnalysis(filePath, ?onProgress, ?stopCheck)` — тонкая обёртка над `PythonRunner`:
 
-1. Проверка файла → `cmd = [python, analyzer.py, path, progress.json?]`.
-2. `proc_open` без `env` (см. раздел 1, п. 2).
-3. Цикл: `pollProgressFile` (+ опциональный stopCheck, `usleep(20_000)`), `proc_get_status`.
-4. Остановка → `terminate()` (`taskkill /PID /T /F` на Windows) → `break`.
-5. После выхода процесса: pipes переведены в blocking, вычитываются stdout/stderr.
-6. `parseStdout` — последняя строка файла с валидным JSON; `stderr` прикладывается только к ответам с ошибкой.
-7. Временный прогресс-файл и его `.tmp` всегда удаляются в `finally`.
+1. Проверка файла → `run(self::SCRIPT, [$filePath], ...)`.
+2. `terminated`/`exit_code === -1` → «Анализ прерван пользователем».
+3. `parseStdout` — последняя строка файла с валидным JSON; `stderr` прикладывается только к ответам с ошибкой.
 
-Старые `PROGRESS`-строки из stderr убраны: прогресс живёт только в JSON-файле.
+Старые `PROGRESS`-строки из stderr убраны: прогресс живёт только в JSON-файле. Все описания proc_open/пайпов живут в `core/PythonRunner.php` — каждый модуль получает его бесплатно.
 
 ### `AnalysisRunner.php`
 
@@ -332,22 +345,22 @@ python analyzer.py <абсолютный путь к треку> [файл-пр�
 ### Бандл JS
 
 ```
-node tools/build.js     → assets/js/sorter.min.js (9 модулей)
+node tools/build.js     → analysis/assets/js/sorter.min.js (9 модулей)
 ```
 
-Для dev-режима `sorter.html` подключает `assets/js/main.js` (модуль), для прод — `sorter.min.js`.
+Для dev-режима `analysis/index.html` подключает `assets/js/main.js` (модуль), для прод — `sorter.min.js`.
 
 ### Быстрые проверки после изменений
 
 ```
-node --check assets/js/*.js          # синтаксис JS-модулей
-node --check assets/js/sorter.min.js # бандл (esm плоский, --check ок)
-php -l api.php classes/*.php         # синтаксис PHP
-python -m py_compile scripts/analyzer.py
+node --check analysis/assets/js/*.js               # синтаксис JS-модулей
+node --check analysis/assets/js/sorter.min.js      # бандл (esm плоский, --check ок)
+php -l core/*.php analysis/analysisApi.php analysis/classes/*.php
+python -m py_compile analysis/scripts/analyzer.py
 
 # smoke-тест API (только на Apache!)
-curl -s "http://127.0.0.1/StemPlayer/api.php?action=get_inbox"
-curl -s "http://127.0.0.1/StemPlayer/api.php?action=get_progress"
+curl -s "http://127.0.0.1/StemPlayer/analysis/analysisApi.php?action=get_inbox"
+curl -s "http://127.0.0.1/StemPlayer/analysis/analysisApi.php?action=get_progress"
 ```
 
 SSE тестировать на Apache, не на `php -S` (однопоточность ломает параллельный поллинг). При тесте полного цикла очищайте `storage/progress.json` от «мёртвого» `running`.
@@ -358,12 +371,14 @@ SSE тестировать на Apache, не на `php -S` (однопоточн
 
 | Хочется… | Идти в… |
 |---|---|
-| Поменять фазы/прогресс анализа | `scripts/analyzer.py` (`ProgressReporter`, `reporter.target`) |
+| Поменять фазы/прогресс анализа | `analysis/scripts/analyzer.py` (`ProgressReporter`, `reporter.target`) |
 | Новый тип события в стриме | `AnalysisRunner` (эмит) + `analysis.js` (обработчик) |
-| Новая колонка таблицы | `sorter.html` (th) + `table.js` + `store.js` rowRefs + CSS |
+| Новая колонка таблицы | `analysis/index.html` (th) + `table.js` + `store.js` rowRefs + CSS |
 | Сообщения журнала | `ProgressStore::log` + `AnalysisRunner` |
+| Часовая логика запуска python | `core/PythonRunner.php` |
 | Лимиты загрузки | `.htaccess` |
 | Исполняемый python | `config.php` / env `STEMPLAYER_PYTHON` |
-| Дизайн плеера | `table.css`: блок `.play-*` (единственное место) |
-| Дизайн тумблера «Подряд» | `components.css`: `.queue-toggle` / `.q-slider` |
-| Логика очереди «Подряд» | `player.js`: `playNextInQueue()` + обработчик `ended` |
+| Дизайн плеера | `analysis/assets/css/table.css`: блок `.play-*` (единственное место) |
+| Дизайн тумблера «Подряд» | `analysis/assets/css/components.css`: `.queue-toggle` / `.q-slider` |
+| Логика очереди «Подряд» | `analysis/assets/js/player.js`: `playNextInQueue()` + обработчик `ended` |
+| Новый модуль проекта | первое: `core/` даёт Http/ProgressStore/PythonRunner; затем папка модуля + `{модуль}Api.php` + `index.html` |

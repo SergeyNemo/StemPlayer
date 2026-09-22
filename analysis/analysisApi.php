@@ -3,24 +3,27 @@
 declare(strict_types=1);
 
 /**
- * Front-контроллер StemPlayer.
+ * API модуля «Обработка» (analysis).
  *
  * Доступные действия:
- *   api.php?action=stream_analyze   — SSE-стрим: анализ + живые события реального времени
- *   api.php?action=analyze_inbox    — анализ одним ответом (фолбэк для простых клиентов)
- *   api.php?action=get_progress     — текущий прогресс из storage/progress.json
- *   api.php?action=get_folders      — дерево папок music/sorted/
- *   api.php?action=get_inbox        — строки таблицы треков (inbox + кэш результатов)
- *   api.php?action=upload           — POST multipart: загрузка треков в inbox/
- *   api.php?action=stop_analysis    — запрос остановки текущего анализа
+ *   analysisApi.php?action=stream_analyze — SSE-стрим: анализ + живые события реального времени
+ *   analysisApi.php?action=analyze_inbox  — анализ одним ответом (фолбэк для простых клиентов)
+ *   analysisApi.php?action=get_progress   — текущий прогресс из storage/progress.json
+ *   analysisApi.php?action=get_folders    — дерево папок music/sorted/
+ *   analysisApi.php?action=get_inbox      — строки таблицы треков (inbox + кэш результатов)
+ *   analysisApi.php?action=upload         — POST multipart: загрузка треков в inbox/
+ *   analysisApi.php?action=stop_analysis  — запрос остановки текущего анализа
  */
 
-require_once __DIR__ . '/config.php';
-require_once __DIR__ . '/classes/ProgressStore.php';
+require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../core/Http.php';
+require_once __DIR__ . '/../core/ProgressStore.php';
+require_once __DIR__ . '/../core/PythonRunner.php';
+require_once __DIR__ . '/classes/AnalysisInterface.php';
+require_once __DIR__ . '/classes/SortingInterface.php';
 require_once __DIR__ . '/classes/FileSorter.php';
-require_once __DIR__ . '/classes/AnalysisService.php';
 require_once __DIR__ . '/classes/TracksIndex.php';
-require_once __DIR__ . '/classes/Http.php';
+require_once __DIR__ . '/classes/AnalysisService.php';
 require_once __DIR__ . '/classes/UploadService.php';
 require_once __DIR__ . '/classes/AnalysisRunner.php';
 
@@ -33,7 +36,7 @@ if (STEMPLAYER_MAX_EXEC_TIME > 0) {
 
 $action        = (string) ($_GET['action'] ?? '');
 $progressStore = new ProgressStore();
-$inboxDir      = __DIR__ . '/music/inbox';
+$inboxDir      = __DIR__ . '/../music/inbox';
 
 match ($action) {
     'stream_analyze' => handleStreamAnalyze($progressStore, $inboxDir),

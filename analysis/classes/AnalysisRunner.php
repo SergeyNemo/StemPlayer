@@ -178,7 +178,7 @@ final class AnalysisRunner
     }
 
     /**
-     * Флаг остановки, выставляемый кнопкой «Стоп» (api.php?action=stop_analysis).
+     * Флаг остановки, выставляемый кнопкой «Стоп» (analysisApi.php?action=stop_analysis).
      */
     public function stopRequested(ProgressStore $store): bool
     {

@@ -13,7 +13,7 @@ final class TracksIndex
 
     public function __construct(?string $file = null)
     {
-        $this->file = $file ?? (__DIR__ . '/../storage/tracks.json');
+        $this->file = $file ?? (__DIR__ . '/../../storage/tracks.json');
     }
 
     /**

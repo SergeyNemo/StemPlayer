@@ -10,7 +10,8 @@ require_once __DIR__ . '/SortingInterface.php';
  */
 final class FileSorter implements SortingInterface
 {
-    private const SORTED_DIR = __DIR__ . '/../music/sorted';
+    // music/sorted лежит в общем для модулей каталоге проекта.
+    private const SORTED_DIR = __DIR__ . '/../../music/sorted';
 
     /**
      * Преобразует BPM и Key в безопасное имя папки без спецсимволов.

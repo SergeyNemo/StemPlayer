@@ -1,0 +1,8 @@
+# Служебные данные
+storage/
+__pycache__/
+
+# Пользовательские аудиофайлы (гигабайты — не в гит)
+music/inbox/
+music/sorted/
+music/stems/

@@ -1,6 +1,6 @@
 # StemPlayer — сортировка треков по BPM и тональности
 
-Веб-модуль «Обработка» для библиотеки StemPlayer: загружаете аудиотреки, нажимаете «Обработать» — сервер анализирует каждый файл (темп, тональность, метаданные) и раскладывает их по папкам `music/sorted/BPM{число}_Key{тональность}/`. Прямо из таблицы треки можно прослушать и перемотать.
+Модульная система. Пока готов один модуль — **«Обработка»** (`analysis/`): загружаете аудиотреки, нажимаете «Обработать» — сервер анализирует каждый файл (темп, тональность, метаданные) и раскладывает их по папкам `music/sorted/BPM{число}_Key{тональность}/`. Прямо из таблицы треки можно прослушать и перемотать. Модуль **«Стемы»** (`stemgen/`, разделение на вокал/бас/ударные/остальное через Demucs) — в плане.
 
 ## Возможности
 
@@ -55,40 +55,47 @@ http://127.0.0.1/StemPlayer/
 ## Как это работает (кратко)
 
 ```
-Браузер (ES-модули)  →  api.php (front-контроллер)  →  classes/*.php  →  scripts/analyzer.py (python)
+Браузер (ES-модули)  →  analysis/analysisApi.php (API модуля)  →  analysis/classes/*.php + core/*.php  →  analysis/scripts/analyzer.py (python)
 ```
 
-1. Загрузка файлов в `api.php?action=upload` → `music/inbox/`.
-2. «Обработать» → `api.php?action=stream_analyze` открывает SSE-соединение.
+1. Загрузка файлов в `analysisApi.php?action=upload` → `music/inbox/`.
+2. «Обработать» → `analysisApi.php?action=stream_analyze` открывает SSE-соединение.
 3. PHP по очереди запускает `analyzer.py` для каждого файла; python пишет живой прогресс в временный JSON-файл, PHP опрашивает его и шлёт события `track_start/track_progress/track_done/track_error`.
 4. Успешные треки копируются в `music/sorted/BPM{число}_Key{тональность}/`, результат — в `storage/tracks.json`.
-5. Если SSE-поток оборвался, фронтенд автоматически переключается на опрос `api.php?action=get_progress`.
+5. Если SSE-поток оборвался, фронтенд автоматически переключается на опрос `analysisApi.php?action=get_progress`.
+
+Цикл запуска python (proc_open + опрос JSON-файла прогресса) вынесен в `core/PythonRunner.php` и общий для всех модулей.
 
 ## Структура проекта
 
 ```
 StemPlayer/
-├── index.php              # отдаёт sorter.html для http://host/StemPlayer/
-├── api.php                # front-контроллер всех действий API
+├── index.php              # посадочная страница со списком модулей (http://host/StemPlayer/)
 ├── config.php             # глобальная конфигурация
 ├── .htaccess              # лимиты загрузки и время выполнения
-├── sorter.html            # страница «Обработка»
-├── assets/
-│   ├── css/               # base.css (переменные, reset), components.css (кнопки, прогресс,
-│   │                      #   загрузка, журнал, тумблер «Подряд»), table.css (таблица, плеер, адаптив)
-│   └── js/                # 9 ES-модулей + sorter.min.js (сборка для продакшена)
-├── classes/               # PHP-классы (хранилища, анализ, HTTP, загрузка, сортировка)
-├── scripts/analyzer.py    # Python-анализатор (BPM/Key/метаданные)
+├── core/                  # общее ядро для модулей
+│   ├── Http.php           #   JSON-ответы, ошибки, SSE-поток
+│   ├── ProgressStore.php  #   чтение/запись storage/progress.json (атомарно)
+│   └── PythonRunner.php   #   запуск python-скриптов с живым прогрессом и стопом
+├── analysis/              # модуль «Обработка»
+│   ├── index.html         #   страница модуля (бывший sorter.html)
+│   ├── analysisApi.php    #   API модуля («имя модуля» + Api.php)
+│   ├── classes/           #   AnalysisService, AnalysisRunner, FileSorter,
+│   │                      #     TracksIndex, UploadService + интерфейсы
+│   ├── assets/            #   css/ (base, components, table) + js/ (9 ES-модулей
+│   │                      #     и sorter.min.js для продакшена)
+│   ├── scripts/analyzer.py#   python-анализатор (BPM/Key/метаданные)
+│   └── music/             #   inbox/ (сюда загружаются треки), sorted/ (результат)
+├── stemgen/               # модуль «Стемы» — запланирован
 ├── tools/build.js         # билдер одного JS-файла (Node)
-├── storage/               # служебные JSON: progress.json, tracks.json
-└── music/
-    ├── inbox/             # сюда загружаются треки
-    └── sorted/            # результат: BPM128_KeyAm/ и т.п.
+└── storage/               # служебные JSON: progress.json, tracks.json
 ```
+
+Интерфейсы модуля — в `analysis/classes/AnalysisInterface.php` и `SortingInterface.php`; ядро в `core/` их не знает и наоборот.
 
 ## API
 
-Все запросы через GET-параметр `action=…`:
+Все запросы через GET-параметр `action=…` к `analysis/analysisApi.php`:
 
 | action | Метод | Описание |
 |---|---|---|
@@ -103,12 +110,12 @@ StemPlayer/
 Пример загрузки:
 
 ```
-curl -F "files[]=@track.mp3" "http://127.0.0.1/StemPlayer/api.php?action=upload"
+curl -F "files[]=@track.mp3" "http://127.0.0.1/StemPlayer/analysis/analysisApi.php?action=upload"
 ```
 
 ## Прод-режим
 
-Фронтенд собран в один файл (`assets/js/sorter.min.js`), но по умолчанию страница использует дев-модули. Чтобы переключиться на собранный файл, замените в `sorter.html`:
+Фронтенд собран в один файл (`analysis/assets/js/sorter.min.js`), но по умолчанию страница использует дев-модули. Чтобы переключиться на собранный файл, замените в `analysis/index.html`:
 
 ```html
 <script type="module" src="assets/js/main.js"></script>
