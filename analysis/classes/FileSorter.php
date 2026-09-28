@@ -42,6 +42,19 @@ final class FileSorter implements SortingInterface
     }
 
     /**
+     * Путь, куда уедет копия исходника (без самого копирования).
+     *
+     * Нужен откату: AnalysisRunner должен знать заранее, existed ли файл
+     * до прогона, иначе при остановке он удалил бы чужую копию.
+     */
+    public function sortedPathFor(string $sourcePath, string $bpm, string $key): string
+    {
+        $folderName = $this->sanitizeFolderName($bpm, $key);
+
+        return self::SORTED_DIR . DIRECTORY_SEPARATOR . $folderName . DIRECTORY_SEPARATOR . basename($sourcePath);
+    }
+
+    /**
      * Копирует исходный файл в папку music/sorted/BPMxxx_KeyXxx/.
      *
      * @return string|false Полный путь к скопированному файлу или false при ошибке.
@@ -52,14 +65,12 @@ final class FileSorter implements SortingInterface
             return false;
         }
 
-        $folderName = $this->sanitizeFolderName($bpm, $key);
-        $targetDir  = self::SORTED_DIR . DIRECTORY_SEPARATOR . $folderName;
+        $destPath = $this->sortedPathFor($sourcePath, $bpm, $key);
+        $targetDir = dirname($destPath);
 
         if (!is_dir($targetDir) && !mkdir($targetDir, 0777, true) && !is_dir($targetDir)) {
             return false;
         }
-
-        $destPath = $targetDir . DIRECTORY_SEPARATOR . basename($sourcePath);
 
         if (!copy($sourcePath, $destPath)) {
             return false;

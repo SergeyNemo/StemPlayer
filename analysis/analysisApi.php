@@ -6,18 +6,23 @@ declare(strict_types=1);
  * API модуля «Обработка» (analysis).
  *
  * Доступные действия:
- *   analysisApi.php?action=stream_analyze — SSE-стрим: анализ + живые события реального времени
- *   analysisApi.php?action=analyze_inbox  — анализ одним ответом (фолбэк для простых клиентов)
- *   analysisApi.php?action=get_progress   — текущий прогресс из storage/progress.json
+ *   analysisApi.php?action=start_analysis — запуск фоновой обработки inbox (CLI-демон, независим от страницы)
+ *   analysisApi.php?action=get_progress   — состояние демона из storage/progress.json (+ stemgen_running)
  *   analysisApi.php?action=get_folders    — дерево папок music/sorted/
- *   analysisApi.php?action=get_inbox      — строки таблицы треков (inbox + кэш результатов)
+ *   analysisApi.php?action=get_inbox      — строки таблицы треков (inbox + кэш результатов, + stemgen_running)
  *   analysisApi.php?action=upload         — POST multipart: загрузка треков в inbox/
  *   analysisApi.php?action=stop_analysis  — запрос остановки текущего анализа
+ *
+ * Модуль работает только через CLI-демон и опрос состояния, поэтому синхронных
+ * и SSE-действий здесь нет.
  */
 
 require_once __DIR__ . '/../config.php';
 require_once __DIR__ . '/../core/Http.php';
+require_once __DIR__ . '/../core/FileLog.php';
 require_once __DIR__ . '/../core/ProgressStore.php';
+require_once __DIR__ . '/../core/RunState.php';
+require_once __DIR__ . '/../core/SpawnCli.php';
 require_once __DIR__ . '/../core/PythonRunner.php';
 require_once __DIR__ . '/classes/AnalysisInterface.php';
 require_once __DIR__ . '/classes/SortingInterface.php';
@@ -37,88 +42,99 @@ if (STEMPLAYER_MAX_EXEC_TIME > 0) {
 $action        = (string) ($_GET['action'] ?? '');
 $progressStore = new ProgressStore();
 $inboxDir      = __DIR__ . '/../music/inbox';
+$flog          = new FileLog(null, 'analysis-api');
 
 match ($action) {
-    'stream_analyze' => handleStreamAnalyze($progressStore, $inboxDir),
-    'analyze_inbox'  => handleAnalyzeInbox($progressStore, $inboxDir),
+    'start_analysis' => handleStartAnalysis($progressStore, $inboxDir, $flog),
     'get_progress'   => handleGetProgress($progressStore),
     'get_folders'    => handleGetFolders(),
     'get_inbox'      => handleGetInbox($inboxDir),
     'upload'         => handleUpload($inboxDir),
-    'stop_analysis'  => handleStopAnalysis($progressStore),
+    'stop_analysis'  => handleStopAnalysis($progressStore, $flog),
     default          => Http::jsonResponse(['error' => 'Неизвестное действие: ' . $action]),
 };
 
-function handleStreamAnalyze(ProgressStore $store, string $inboxDir): never
-{
-    Http::sseHeaders();
-
-    $state = $store->read();
-    $runner = new AnalysisRunner();
-
-    if (($state['status'] ?? '') === 'running' && $runner->isRunningNotStale((string) $state['started_at'])) {
-        Http::sseEmit('already_running', ['message' => 'Анализ уже выполняется в другом подключении.', 'state' => $state]);
-        exit;
-    }
-
-    try {
-        $files = $runner->collectInboxFiles($inboxDir);
-
-        if ($files === []) {
-            Http::sseEmit('idle', ['message' => 'Папка inbox/ пуста или не содержит аудиофайлов.']);
-            exit;
-        }
-
-        $summary = $runner->run($store, $files, streaming: true);
-
-        Http::sseEmit('done', $summary);
-    } catch (Throwable $e) {
-        $store->log('error', 'Фатальная ошибка: ' . $e->getMessage());
-        $store->update(['status' => 'error']);
-
-        Http::sseEmit('error', ['message' => $e->getMessage()]);
-    }
-
-    exit;
-}
-
 /**
- * Классический ответ JSON (используется фолбэком и внешними клиентами).
+ * Запуск фоновой обработки: страница не обязана оставаться открытой —
+ * работу делает отдельный CLI-демон, а фронт лишь опрашивает прогресс.
  */
-function handleAnalyzeInbox(ProgressStore $store, string $inboxDir): never
+function handleStartAnalysis(ProgressStore $store, string $inboxDir, FileLog $flog): never
 {
     $state = $store->read();
     $runner = new AnalysisRunner();
 
-    if ($state['status'] === 'running' && $runner->isRunningNotStale((string) $state['started_at'])) {
-        Http::jsonResponse([
-            'status'  => 'running_already',
-            'message' => 'Анализ уже выполняется. Дождитесь завершения.',
-            'state'   => $state,
-        ]);
+    if (($state['status'] ?? '') === 'running' && RunState::isFresh($state)) {
+        Http::jsonResponse(['status' => 'already_running', 'message' => 'Анализ уже выполняется.', 'started' => false]);
     }
+
+    // Взаимная блокировка: пока генерируются стемы, обработку не запускаем.
+    if (RunState::otherModuleRunning(RunState::ANALYSIS)) {
+        Http::jsonResponse(['status' => 'blocked', 'message' => 'Сейчас выполняется генерация стемов — запустите обработку после её завершения.', 'started' => false]);
+    }
+
+    if ($runner->collectInboxFiles($inboxDir) === []) {
+        Http::jsonResponse(['status' => 'idle', 'message' => 'В папке inbox/ нет файлов для обработки.', 'started' => false]);
+    }
+
+    // Эксклюзивный захват на момент запуска: два окна не поднимут два демона.
+    $lockPath = __DIR__ . '/../storage/analysis_start.lock';
+    $lock = @fopen($lockPath, 'c');
+
+    if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) {
+        Http::jsonResponse(['status' => 'already_running', 'message' => 'Обработка уже запускается.', 'started' => false]);
+    }
+
+    $spawnLog = __DIR__ . '/../logs/spawn-analysis.log';
+    $beforeRunId = (string) ($state['run_id'] ?? '');
+    $beforePing = (int) ($state['last_ping'] ?? 0);
 
     try {
-        $files = $runner->collectInboxFiles($inboxDir);
+        $spawn = SpawnCli::spawn(__DIR__ . '/cli/analyze_cli.php', $spawnLog);
 
-        if ($files === []) {
-            Http::jsonResponse(['status' => 'idle', 'message' => 'Папка inbox/ пуста или не содержит аудиофайлов.']);
+        if (!$spawn['ok']) {
+            $flog->write('error', 'Не удалось запустить демон: ' . ($spawn['error'] ?? 'неизвестная причина'));
+            Http::jsonResponse(['status' => 'error', 'message' => $spawn['error'] ?? 'Не удалось запустить фоновый процесс.', 'started' => false]);
         }
 
-        $summary = $runner->run($store, $files);
+        // Демон обязан «подать признаки жизни» в progress.json (новый run_id).
+        // Если за 4 секунды тишина — значит процесс умер, показываем причину.
+        $alive = false;
 
-        Http::jsonResponse($summary);
-    } catch (Throwable $e) {
-        $store->log('error', 'Фатальная ошибка: ' . $e->getMessage());
-        $store->update(['status' => 'error']);
+        for ($i = 0; $i < 20; $i++) {
+            usleep(200_000);
+            $now = $store->readFresh();
 
-        Http::jsonResponse(['status' => 'error', 'message' => $e->getMessage()]);
+            if ((string) ($now['run_id'] ?? '') !== $beforeRunId
+                || (int) ($now['last_ping'] ?? 0) > $beforePing) {
+                $alive = true;
+                break;
+            }
+        }
+
+        if (!$alive) {
+            $tail = SpawnCli::logTail($spawnLog);
+            $flog->write('error', 'Демон не подал признаков жизни за 4 с.' . ($tail !== '' ? ' Вывод: ' . $tail : ' Лог демона пуст.'));
+            Http::jsonResponse([
+                'status'  => 'error',
+                'started' => false,
+                'message' => 'Фоновый процесс не запустился. ' . ($tail !== '' ? 'Вывод: ' . $tail : 'Смотри logs/spawn-analysis.log.'),
+            ]);
+        }
+    } finally {
+        flock($lock, LOCK_UN);
+        fclose($lock);
     }
+
+    $flog->write('info', 'Запущена фоновая обработка (CLI-демон).');
+    Http::jsonResponse(['status' => 'started', 'message' => 'Обработка запущена.', 'started' => true]);
 }
 
 function handleGetProgress(ProgressStore $store): never
 {
-    Http::jsonResponse($store->read());
+    $data = $store->read();
+    $data['stemgen_running'] = RunState::otherModuleRunning(RunState::ANALYSIS);
+
+    Http::jsonResponse($data);
 }
 
 function handleGetFolders(): never
@@ -140,8 +156,9 @@ function handleGetInbox(string $inboxDir): never
     $runner = new AnalysisRunner();
 
     Http::jsonResponse([
-        'status' => 'ok',
-        'rows'   => $index->buildRows($runner->collectInboxFiles($inboxDir)),
+        'status'          => 'ok',
+        'rows'            => $index->buildRows($runner->collectInboxFiles($inboxDir)),
+        'stemgen_running' => RunState::otherModuleRunning(RunState::ANALYSIS),
     ]);
 }
 
@@ -153,15 +170,17 @@ function handleUpload(string $inboxDir): never
     Http::jsonResponse((new UploadService())->handle($_FILES['files'] ?? null, $inboxDir));
 }
 
-function handleStopAnalysis(ProgressStore $store): never
+function handleStopAnalysis(ProgressStore $store, FileLog $flog): never
 {
     $state = $store->read();
 
-    if (($state['status'] ?? '') !== 'running') {
+    if ((($state['status'] ?? '') !== 'running')) {
+        $flog->write('warning', 'Остановка запрошена, но анализ не выполняется.');
         Http::jsonResponse(['status' => 'idle', 'message' => 'Анализ сейчас не выполняется.']);
     }
 
-    $store->update(['stop_requested' => true]);
+    $flog->write('info', 'Запрошена остановка анализа.');
+    $store->requestStop();
 
     Http::jsonResponse(['status' => 'ok', 'message' => 'Останавливаем анализ…']);
 }

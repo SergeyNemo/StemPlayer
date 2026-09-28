@@ -13,32 +13,28 @@ const els = {
     uploadProgress: $('#upload-progress'),
     uploadStatus: $('#upload-status'),
     uploadFill: $('#upload-fill'),
+    addBtn: $('#add-btn'),
     processBtn: $('#process-btn'),
     stopBtn: $('#stop-btn'),
-    queueCheck: $('#queue-check'),
     trackTotalText: $('#track-total-text'),
-    progressFill: $('#progress-fill'),
-    progressLabel: $('#progress-label'),
+    progressBar: $('#progress-bar'),
+    overallProgress: $('#overall-progress'),
     banner: $('#banner'),
     bannerText: $('#banner-text'),
-    bannerFoldersToggle: $('#banner-folders-toggle'),
-    bannerFolders: $('#banner-folders'),
     tbody: $('#tracks-tbody'),
-    logToggle: $('#log-toggle'),
-    console: $('#console'),
+    logLine: $('#log-line'),
+    stemsLink: $('#nav-stemgen'),
+    homeLink: $('#nav-home'),
 };
 
 const state = {
     rows: [],                 // строки из get_inbox
-    rowRefs: new Map(),       // name -> {tr, nameCell, bpmCell, keyCell, durCell, playBtn, playWrapper, playFill, playTime, playBar}
+    rowRefs: new Map(),       // name -> {tr, nameCell, bpmCell, keyCell, durCell, playBtn, playWrapper, playFill, playTime, playBar, busyState}
     sort: {},                 // { key: 'num'|'track'|'bpm'|'key'|'duration', dir: 1|-1|0 }
     mode: 'idle',             // 'idle' | 'processing' | 'poll' | 'done'
-    es: null,
     pollTimer: null,
-    liveTimer: null,
-    fallbackFired: false,
     stopping: false,
-    renderedLogs: 0,
+    sawRun: false,            // видели ли статус 'running' (для детекта «run исчез»)
     play: { audio: null, name: null },
 };
 

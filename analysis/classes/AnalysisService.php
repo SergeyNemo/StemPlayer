@@ -13,16 +13,16 @@ final class AnalysisService implements AnalysisInterface
     private const SCRIPT = __DIR__ . '/../scripts/analyzer.py';
 
     /**
-     * @param callable(float $fraction, string $phase): void|null $onProgress
-     * @param callable(): bool|null                             $stopCheck  Вернуть true — прервать анализ.
+     * @param callable(): bool|null $stopCheck Вернуть true — прервать анализ.
+     * @param callable(string): void|null $onStage Этап текущей работы пайтона.
      */
-    public function runAnalysis(string $filePath, ?callable $onProgress = null, ?callable $stopCheck = null): array
+    public function runAnalysis(string $filePath, ?callable $stopCheck = null, ?callable $onStage = null): array
     {
         if (!is_file($filePath)) {
             return $this->error('Файл не найден: ' . $filePath);
         }
 
-        $result = (new PythonRunner())->run(self::SCRIPT, [$filePath], $onProgress, $stopCheck);
+        $result = (new PythonRunner())->run(self::SCRIPT, [$filePath], $stopCheck, '', $onStage);
 
         if ($result['terminated'] || $result['exit_code'] === -1) {
             return $this->error('Анализ прерван пользователем', $result['stderr']);
@@ -43,21 +43,30 @@ final class AnalysisService implements AnalysisInterface
     }
 
     /**
-     * Ищет последнюю непустую строку с валидным JSON.
+     * Ищет строку с результатом: последнюю, где есть поле "status".
+     *
+     * Раньше бралась просто последняя непустая строка, но в stdout теперь
+     * попадают и служебные {"stage": ...}, поэтому ориентируемся на признак
+     * результата, а не на позицию.
      *
      * @return array<string, mixed>|null
      */
     private function parseStdout(string $stdout): ?array
     {
-        $lines = array_filter(array_map('trim', explode("\n", $stdout)), fn (string $l): bool => $l !== '');
+        $lines = array_reverse(array_filter(
+            array_map('trim', explode("\n", $stdout)),
+            fn (string $l): bool => $l !== ''
+        ));
 
-        if ($lines === []) {
-            return null;
+        foreach ($lines as $line) {
+            $decoded = json_decode($line, true);
+
+            if (is_array($decoded) && isset($decoded['status'])) {
+                return $decoded;
+            }
         }
 
-        $decoded = json_decode((string) end($lines), true);
-
-        return is_array($decoded) ? $decoded : null;
+        return null;
     }
 
     /**

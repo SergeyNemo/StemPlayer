@@ -37,13 +37,27 @@ final class TracksIndex
     }
 
     /**
-     * @param array<string, mixed> $entry
+     * Убирает запись трека из кэша (откат прерванного анализа).
+     *
+     * @return bool true — запись была и удалена.
      */
-    public function save(string $fileName, array $entry): void
+    public function forget(string $fileName): bool
     {
-        $data          = $this->read();
-        $data[strtolower($fileName)] = $entry;
+        $key = strtolower($fileName);
+        $data = $this->read();
 
+        if (!array_key_exists($key, $data)) {
+            return false;
+        }
+
+        unset($data[$key]);
+        $this->write($data);
+
+        return true;
+    }
+
+    private function write(array $data): void
+    {
         $dir = dirname($this->file);
 
         if (!is_dir($dir) && !mkdir($dir, 0777, true) && !is_dir($dir)) {
@@ -61,6 +75,17 @@ final class TracksIndex
         fflush($fp);
         flock($fp, LOCK_UN);
         fclose($fp);
+    }
+
+    /**
+     * @param array<string, mixed> $entry
+     */
+    public function save(string $fileName, array $entry): void
+    {
+        $data = $this->read();
+        $data[strtolower($fileName)] = $entry;
+
+        $this->write($data);
     }
 
     /**

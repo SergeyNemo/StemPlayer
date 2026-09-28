@@ -1,5 +1,5 @@
 # StemPlayer — разрешаем загрузку больших аудиофайлов и длинный запуск скриптов.
-php_value upload_max_filesize 300M
-php_value post_max_size 310M
-php_value max_file_uploads 60
+php_value upload_max_filesize 100M
+php_value post_max_size 110M
+php_value max_file_uploads 5
 php_value max_execution_time 0

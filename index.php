@@ -6,24 +6,29 @@ declare(strict_types=1);
  * Точка входа StemPlayer: страница со списком модулей.
  *
  * Каждый модуль — самостоятельная папка со своим API (`{module}Api.php`)
- * и страницей (`index.html`). Здесь только карточки-ссылки.
+ * и страницей (`index.php`). Здесь только карточки-ссылки.
+ *
+ * Пока работает любой из модулей, хаб закрыт: он перенаправляет на страницу
+ * запущенного модуля (core/PageGuard.php).
  */
 
-/** @var array<array{slug: string, title: string, repo: string, desc: string, status: string}> */
+require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/core/RunState.php';
+require_once __DIR__ . '/core/PageGuard.php';
+
+PageGuard::enforceHome();
+
+/** @var list<array{slug: string, title: string, desc: string}> */
 $modules = [
     [
-        'slug'   => 'analysis',
-        'title'  => 'Обработка',
-        'repo'   => 'analysis',
-        'desc'   => 'Анализ BPM/Key, очередь, сортировка по папкам, общий плеер.',
-        'status' => 'работает',
+        'slug'  => 'analysis',
+        'title' => 'Обработка',
+        'desc'  => 'Анализ BPM/Key, очередь, сортировка по папкам, общий плеер.',
     ],
     [
-        'slug'   => 'stemgen',
-        'title'  => 'Стемы',
-        'repo'   => 'stemgen',
-        'desc'   => 'Разделение треков на вокал/бас/ударные/остальное (Demucs).',
-        'status' => 'запланирован',
+        'slug'  => 'stemgen',
+        'title' => 'Стемы',
+        'desc'  => 'Разделение треков на вокал/бас/ударные/остальное (Demucs + CUDA).',
     ],
 ];
 ?>
@@ -33,7 +38,7 @@ $modules = [
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>StemPlayer — модули</title>
-<link rel="stylesheet" href="analysis/assets/css/base.css">
+<link rel="stylesheet" href="analysis/assets/css/base.css?v=3">
 <style>
     body { padding: 2rem; }
     .modules { display: grid; gap: 1rem; max-width: 720px; margin-top: 1.5rem; }
@@ -57,26 +62,20 @@ $modules = [
         padding: .15rem .6rem;
         border-radius: 999px;
         background: rgba(0,0,0,.35);
-        color: #888;
+        color: #7fe08a;
     }
-    .module .status.ready { color: #7fe08a; }
 </style>
 </head>
 <body>
     <h1>StemPlayer</h1>
-    <p>Модульная система: обработка музыки + будущее разделение на стемы.</p>
+    <p>Модульная система: обработка музыки + разделение на стемы.</p>
 
     <nav class="modules">
         <?php foreach ($modules as $module): ?>
-            <?php $ready = $module['status'] === 'работает'; ?>
-            <a class="module" href="<?= $module['slug'] ?>/index.html">
+            <a class="module" href="<?= $module['slug'] ?>/index.php">
                 <h2><?= htmlspecialchars($module['title']) ?> →</h2>
                 <p><?= htmlspecialchars($module['desc']) ?></p>
-                <?php if ($ready): ?>
-                    <span class="status ready"><?= htmlspecialchars($module['status']) ?></span>
-                <?php else: ?>
-                    <span class="status"><?= htmlspecialchars($module['status']) ?></span>
-                <?php endif; ?>
+                <span class="status">открыть</span>
             </a>
         <?php endforeach; ?>
     </nav>

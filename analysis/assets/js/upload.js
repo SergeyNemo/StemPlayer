@@ -1,6 +1,6 @@
-import { state, els } from './store.js';
-import { fetchJson, appendLog } from './utils.js';
-import { switchToUpload, switchToTracks } from './views.js';
+import { state, els } from './store.js?v=15';
+import { fetchJson, appendLog } from './utils.js?v=15';
+import { switchToUpload, switchToTracks } from './views.js?v=15';
 
 // ---------- Загрузка файлов ----------
 
@@ -48,6 +48,7 @@ function refreshInbox() {
         .then((data) => {
             state.rows = data.rows || [];
             state.sort = {};
+            state.stemgenRunning = !!(data.stemgen_running);
             if (state.rows.length === 0) {
                 switchToUpload();
             } else {

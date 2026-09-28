@@ -1,183 +1,195 @@
-import { state, els, TERMINAL_STATES, POLL_INTERVAL, api } from './store.js';
-import { fetchJson, appendLog, renderLogs, setBadge, updateOverall } from './utils.js';
-import { rowProcessing, rowProgress, rowDone, rowError, rebuildRowIdle } from './table.js';
-import { showBanner, hideBanner } from './views.js';
-import { refreshInbox } from './upload.js';
+import { state, els, TERMINAL_STATES, POLL_INTERVAL } from './store.js?v=15';
+import { fetchJson, appendLog, renderLogs, setBadge, updateProcessUI, hideLogLine } from './utils.js?v=15';
+import { rowProcessing, rowQueued, rowDone, rowError, rebuildRowIdle } from './table.js?v=15';
+import { syncPlayButtons } from './player.js?v=15';
+import { hideBanner } from './views.js?v=15';
+import { refreshInbox } from './upload.js?v=15';
 
-// ---------- SSE-поток ----------
+// Демон шлёт сердцебиение (last_ping) раз в 10 с, поэтому 120 с молчания —
+// это уже точно не работающий процесс.
+function isStaleRun(progress) {
+    const ping = Number(progress && progress.last_ping || 0);
 
-function startProcessing() {
-    state.mode = 'processing';
-    state.fallbackFired = false;
-    state.stopping = false;
+    return ping > 0 && Date.now() / 1000 - ping > 120;
+}
+
+function recoverDeadRun() {
     stopPolling();
-    closeStream();
+    state.mode = 'idle';
+    state.stopping = false;
+    els.stopBtn.hidden = true;
+    setBadge('idle');
+    updateProcessUI();
+    syncPlayButtons();
+    appendLog({ time: '--:--:--', type: 'error', message: 'Фоновый процесс обработки не отвечает (завис). Состояние сброшено — запустите заново.' });
+    refreshInbox();
+}
 
-    els.processBtn.disabled = true;
+function finishProcessing(status) {
+    stopPolling();
+    state.mode = 'done';
+    state.stopping = false;
+    els.stopBtn.hidden = true;
+    updateProcessUI();
+    setBadge(status);
+    syncPlayButtons();
+}
+
+// Запуск обработки: сервер сам поднимает отдельный фоновый процесс (CLI-демон),
+// поэтому страницу можно свободно покидать — обработка никуда не исчезнет.
+function startProcessing() {
+    if (state.stemgenRunning) {
+        appendLog({ time: '--:--:--', type: 'error', message: 'Идёт генерация стемов — запустите обработку после её завершения.' });
+        return;
+    }
+
+    state.stopping = false;
+    state.sawRun = false;
+    stopPolling();
+
     els.stopBtn.hidden = false;
+    resetStopBtn();
     hideBanner();
-    els.console.innerHTML = '';
-    state.renderedLogs = 0;
+    hideLogLine();
     setBadge('running');
-    updateOverall(0, state.rows.length);
+    updateProcessUI();
+    const todo = state.rows.filter((r) => (r.status || 'pending') !== 'done').length;
+    appendLog({ time: '--:--:--', type: 'info', message: `Запускаю обработку (${todo || state.rows.length} трек(ов))…` });
 
-    // сбрасываем все строки в «ожидание»
     state.rowRefs.forEach((ref) => {
         ref.tr.classList.remove('row-done', 'row-error', 'row-processing');
-        rebuildRowIdle(ref);
+        rebuildRowIdle(ref, true);
         ref.bpmCell.textContent = '—';
         ref.keyCell.textContent = '—';
         ref.durCell.textContent = '—';
     });
+    syncPlayButtons();
 
-    const es = new EventSource(`${api.base}?action=stream_analyze`);
-    state.es = es;
-
-    const events = {
-        log: (d) => appendLog(d),
-        progress: (d) => updateOverall(d.processed, d.total),
-        track_start: (d) => rowProcessing(d.name),
-        track_progress: (d) => rowProgress(d.name, d),
-        track_done: (d) => rowDone(d.name, d),
-        track_error: (d) => rowError(d.name, d.message),
-        idle: (d) => {
-            appendLog({ time: '--:--:--', type: 'warning', message: d.message || 'Нет файлов для обработки.' });
-            finishProcessing('idle');
-        },
-        already_running: (d) => {
-            appendLog({ time: '--:--:--', type: 'warning', message: d.message || 'Анализ уже выполняется в другом окне.' });
-            closeStream();
-            startPolling(false);
-        },
-        done: (d) => {
-            const wasStopped = d && d.status === 'stopped';
-            updateOverall(wasStopped ? (d.processed ?? 0) : d.total, d.total);
-            const message = wasStopped
-                ? `Остановлено: обработано ${d.sorted ?? 0} из ${d.total ?? 0} файлов.`
-                : `Готово: обработано ${d.sorted ?? 0} из ${d.total ?? 0} файлов.`;
-            showBanner(message, d.folders || []);
-            appendLog({ time: '--:--:--', type: 'info', message });
-            finishProcessing(wasStopped ? 'stopped' : 'complete');
-            refreshInbox();
-        },
-        error: (d) => {
-            appendLog({ time: '--:--:--', type: 'error', message: d.message || 'Ошибка сервера.' });
-            finishProcessing('error');
-        },
-    };
-
-    Object.entries(events).forEach(([name, handler]) =>
-        es.addEventListener(name, (e) => {
-            try { handler(JSON.parse(e.data)); } catch { /* повреждённое событие */ }
-        })
-    );
-
-    es.onerror = () => fallbackToPolling();
-
-    // Страховка на случай буферизации стрима: полоса и статус всё равно
-    // двигаются из progress.json, который сервер пишет параллельно циклу.
-    startLivePoll();
-}
-
-function fallbackToPolling() {
-    if (state.mode !== 'processing') return;
-    appendLog({ time: '--:--:--', type: 'warning', message: 'Поток реального времени прервался, переключаюсь на опрос…' });
     startPolling(true);
 }
 
-function finishProcessing(status) {
-    closeStream();
-    stopPolling();
-    stopLivePoll();
-    state.mode = 'done';
+// ---------- Остановка ----------
+
+// Подтверждение остановки держим на одном числе-дедлайне, а не на объекте
+// с ключом state.mode и не на таймере. Прежняя схема давала петлю
+// «Стоп → Подтвердить → Стоп → …» тремя способами:
+//   1) state.mode меняется между кликами (idle/done), ключ менялся — второе
+//      нажатие снова взводило защёлку вместо остановки;
+//   2) таймер взвода никогда не отменялся при подтверждении и мог сработать
+//      поверх следующего нажатия, молча вернув подпись «■ Стоп»;
+//   3) любой ответ сервера, кроме 'ok', возвращал кнопку в «Стоп» без
+//      объяснения — выглядело как бесконечное «подтвердить и ничего».
+// Теперь решение принимается только по дедлайну, таймер лишь убирает
+// подпись, а «не остановилось» всегда объясняется строкой в журнале.
+const STOP_ARM_MS = 3000;
+let stopArmedUntil = 0;
+let stopArmTimer = null;
+
+function resetStopBtn() {
+    stopArmedUntil = 0;
     state.stopping = false;
-    els.processBtn.disabled = false;
-    els.stopBtn.hidden = true;
-    setBadge(status); // complete/error/idle/stopped — все терминальные состояния подсвечиваем
-}
 
-function closeStream() {
-    if (state.es) {
-        state.es.close();
-        state.es = null;
+    if (stopArmTimer !== null) {
+        clearTimeout(stopArmTimer);
+        stopArmTimer = null;
     }
+
+    els.stopBtn.disabled = false;
+    els.stopBtn.textContent = '■ Стоп';
 }
 
-// ---------- Живой опрос прогресса (страховка от буферизации SSE) ----------
+function requestStop() {
+    if (state.stopping) return;
 
-function startLivePoll() {
-    stopLivePoll();
-    state.liveTimer = setInterval(pollLive, 500);
-}
+    // Первое нажатие — взвод. Подпись живёт 3 секунды, после неё тихо
+    // возвращаемся к «Стоп», но на следующем нажатии решение всё равно
+    // примет дедлайн, а не этот таймер.
+    if (Date.now() > stopArmedUntil) {
+        stopArmedUntil = Date.now() + STOP_ARM_MS;
+        els.stopBtn.textContent = 'Подтвердить';
 
-function stopLivePoll() {
-    if (state.liveTimer !== null) {
-        clearInterval(state.liveTimer);
-        state.liveTimer = null;
-    }
-}
+        if (stopArmTimer !== null) clearTimeout(stopArmTimer);
+        stopArmTimer = setTimeout(() => {
+            stopArmTimer = null;
+            if (Date.now() >= stopArmedUntil && els.stopBtn.textContent === 'Подтвердить') {
+                stopArmedUntil = 0;
+                els.stopBtn.textContent = '■ Стоп';
+            }
+        }, STOP_ARM_MS + 50);
 
-function pollLive() {
-    if (state.mode !== 'processing') {
-        stopLivePoll();
         return;
     }
 
-    fetchJson('get_progress')
-        .then((p) => {
-            if (state.mode !== 'processing') return;
+    stopArmedUntil = 0;
 
-            const status = p.status || 'idle';
-            if (TERMINAL_STATES.has(status)) {
-                stopLivePoll();
-                return;
-            }
+    if (stopArmTimer !== null) {
+        clearTimeout(stopArmTimer);
+        stopArmTimer = null;
+    }
 
-            updateOverall(p.processed, p.total);
-            renderLogs(p.log || []);
-
-            const live = p.live;
-            if (live && live.name) {
-                rowProgress(live.name, live);
-            } else if (p.current_file) {
-                rowProcessing(p.current_file);
-            }
-        })
-        .catch(() => {});
-}
-
-// ---------- Остановка анализа ----------
-
-function requestStop() {
     state.stopping = true;
     els.stopBtn.disabled = true;
-    els.stopBtn.textContent = 'Останавливаю…';
-
-    appendLog({ time: '--:--:--', type: 'warning', message: 'Запрошена остановка: завершаю текущий трек…' });
+    els.stopBtn.textContent = 'Останавливаем…';
+    setBadge('stopping');
 
     fetchJson('stop_analysis')
-        .then(() => {
-            // Истинное завершение придёт событием done(status: stopped)
-            // либо терминальным состоянием через опрос.
+        .then((res) => {
+            if (!res) {
+                resetStopBtn();
+                appendLog({ time: '--:--:--', type: 'error', message: 'Сервер не ответил на запрос остановки.' });
+            } else if (res.status === 'ok') {
+                // Дальше финал придёт опросом: он и сбросит кнопку.
+                appendLog({ time: '--:--:--', type: 'warning', message: 'Запрос остановки принят — ждём завершения текущего трека…' });
+            } else if (res.status === 'idle') {
+                // Демон уже не работает: останавливать нечего. Честно говорим
+                // об этом и синхронизируем UI с фактическим состоянием.
+                resetStopBtn();
+                appendLog({ time: '--:--:--', type: 'warning', message: res.message || 'Обработка уже не выполняется — останавливать нечего.' });
+                refreshInbox();
+            } else {
+                resetStopBtn();
+                appendLog({ time: '--:--:--', type: 'error', message: res.message || 'Не удалось отправить запрос остановки.' });
+            }
         })
-        .catch((err) => {
-            els.stopBtn.disabled = false;
-            els.stopBtn.textContent = '■ Стоп';
-            appendLog({ time: '--:--:--', type: 'error', message: `Не удалось остановить: ${err.message}` });
+        .catch(() => {
+            resetStopBtn();
+            appendLog({ time: '--:--:--', type: 'error', message: 'Нет связи с сервером — запрос остановки не отправлен.' });
         });
 }
 
-// ---------- Фолбэк: опрос ----------
+// ---------- Опрос состояния ----------
+
+// Синхронизируем кэш строк с тем, что уже сообщил демон. Иначе сортировка
+// или перерисовка таблицы снова показали бы «В очереди…» у готового трека.
+// Объект общий: ref.row в rowRefs — это тот же элемент state.rows.
+function markRow(name, patch) {
+    const row = state.rows.find((r) => r.name === name);
+    if (row) Object.assign(row, patch);
+}
 
 function startPolling(launchAnalysis) {
     stopPolling();
     state.mode = 'poll';
-    els.processBtn.disabled = true;
     els.stopBtn.hidden = false;
+    updateProcessUI();
+    syncPlayButtons();
 
-    if (launchAnalysis && !state.fallbackFired) {
-        state.fallbackFired = true;
-        fetchJson('analyze_inbox').catch(() => {});
+    if (launchAnalysis) {
+        fetchJson('start_analysis').then((res) => {
+            if (!res) return;
+            if (res.status === 'already_running') {
+                appendLog({ time: '--:--:--', type: 'warning', message: res.message || 'Анализ уже выполняется.' });
+            } else if (res.status === 'blocked') {
+                appendLog({ time: '--:--:--', type: 'error', message: res.message || 'Сейчас выполняется генерация стемов.' });
+                finishProcessing('idle');
+            } else if (res.status === 'idle') {
+                appendLog({ time: '--:--:--', type: 'warning', message: res.message || 'Нет файлов для обработки.' });
+                finishProcessing('idle');
+            } else if (res.status === 'error') {
+                appendLog({ time: '--:--:--', type: 'error', message: 'Не удалось запустить обработку.' });
+                finishProcessing('error');
+            }
+        }).catch(() => {});
     }
 
     state.pollTimer = setInterval(pollProgress, POLL_INTERVAL);
@@ -194,45 +206,95 @@ function stopPolling() {
 function pollProgress() {
     fetchJson('get_progress')
         .then((progress) => {
+            if (progress.stemgen_running !== undefined) {
+                state.stemgenRunning = !!progress.stemgen_running;
+            }
+
             const status = progress.status || 'idle';
             setBadge(status);
-            updateOverall(progress.processed, progress.total);
-            renderLogs(progress.log || []);
+            renderLogs(progress.last_message);
+            updateProcessUI();
 
             if (status === 'running') {
-                const live = progress.live;
-                if (live && live.name) {
-                    rowProgress(live.name, live);
-                } else {
-                    const cur = progress.current_file;
-                    state.rowRefs.forEach((ref, name) => {
-                        if (cur && name === cur) rowProcessing(name);
-                    });
+                if (isStaleRun(progress)) {
+                    recoverDeadRun();
+                    return;
                 }
+                state.sawRun = true;
+
+                // Готовность треков сообщает демон (progress.done_files /
+                // progress.error_files) — по ходу прогона, с результатом.
+                // Раньше doneSet собирался из кэша state.rows, который
+                // обновлялся только в финале (refreshInbox), поэтому уже
+                // обработанные треки откатывались в «В очереди…» и висели
+                // так до самого конца.
+                const doneRun = progress.done_files || {};
+                const errRun  = progress.error_files || {};
+
+                // Готовые ДО этого прогона (в done_files их нет — список
+                // сбрасывается на каждый запуск).
+                const doneSet = new Set(
+                    state.rows.filter((r) => (r.status || '') === 'done').map((r) => r.name)
+                );
+                const cur = progress.current_file;
+                const stageIndex = progress.current_stage_index;
+                const stageLabel = progress.current_stage_label;
+
+                state.rowRefs.forEach((ref, name) => {
+                    if (name === cur) {
+                        // Этап из демона рисуем в строке сразу: полоска растёт
+                        // по факту выполненного шага, а не по таймеру.
+                        rowProcessing(name, stageIndex, stageLabel);
+                    } else if (errRun[name]) {
+                        rowError(name, errRun[name]);
+                        markRow(name, { status: 'error', message: errRun[name] });
+                    } else if (doneRun[name]) {
+                        rowDone(name, doneRun[name]);
+                        markRow(name, {
+                            status: 'done',
+                            bpm: doneRun[name].bpm,
+                            key: doneRun[name].key,
+                            duration: doneRun[name].duration,
+                        });
+                    } else if (!doneSet.has(name)) {
+                        rowQueued(name);
+                    }
+                });
+                return;
+            }
+
+            // Run исчез: статус стал idle, хотя мы уже видели running (демон умер,
+            // storage очистили, статус сброшен) — выходим из «зависшей» фазы,
+            // чтобы не висел индикатор работы и не мерцал «Идёт обработка».
+            if (status === 'idle' && state.sawRun) {
+                recoverDeadRun();
                 return;
             }
 
             if (TERMINAL_STATES.has(status)) {
                 stopPolling();
-                els.processBtn.disabled = false;
-                els.stopBtn.hidden = true;
                 state.mode = 'done';
-                updateOverall(progress.processed, progress.total);
-
-                if (status === 'complete') {
-                    showBanner('Анализ завершён.', progress.folders || []);
-                    refreshInbox();
-                } else if (status === 'stopped') {
-                    showBanner('Анализ остановлен.', progress.folders || []);
-                    refreshInbox();
-                }
+                // Кнопку «Стоп» сбрасываем здесь же: путь финала опроса не
+                // проходит через finishProcessing(), из-за чего state.stopping
+                // оставался true и следующая кнопка не реагировала.
+                resetStopBtn();
+                updateProcessUI();
+                const stopped = status === 'stopped';
+                appendLog({
+                    time: '--:--:--',
+                    type: stopped ? 'warning' : 'success',
+                    message: stopped ? 'Остановлено' : 'Готово',
+                });
+                setTimeout(hideLogLine, 3000);
+                refreshInbox();
             }
         })
         .catch(() => {
             stopPolling();
             state.mode = 'idle';
-            els.processBtn.disabled = false;
+            resetStopBtn();
+            updateProcessUI();
         });
 }
 
-export { startProcessing, requestStop, startPolling };
+export { startProcessing, requestStop, startPolling, resetStopBtn };

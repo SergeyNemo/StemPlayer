@@ -3,42 +3,10 @@
 declare(strict_types=1);
 
 /**
- * HTTP-ответы: JSON и SSE-события.
+ * HTTP-ответы: JSON с безопасной кодировкой.
  */
 final class Http
 {
-    /**
-     * Заголовки SSE-стрима. Отключаем всё буферизующее (gzip, ob_*),
-     * иначе события приходят пачками.
-     */
-    public static function sseHeaders(): void
-    {
-        if (function_exists('apache_setenv')) {
-            @apache_setenv('no-gzip', '1');
-        }
-        ini_set('zlib.output_compression', 'Off');
-        while (ob_get_level() > 0) {
-            ob_end_flush();
-        }
-        header('Content-Type: text/event-stream; charset=utf-8');
-        header('Cache-Control: no-cache, no-transform');
-        header('Connection: keep-alive');
-        header('X-Accel-Buffering: no');
-        ob_implicit_flush(true);
-    }
-
-    /**
-     * Отправляет именованное SSE-событие и сбрасывает буфер.
-     *
-     * @param array<string, mixed> $payload
-     */
-    public static function sseEmit(string $event, array $payload): void
-    {
-        echo 'event: ' . $event . "\n";
-        echo 'data: ' . self::encode($payload) . "\n\n";
-        flush();
-    }
-
     /**
      * @param array<string, mixed> $payload
      */
@@ -54,6 +22,54 @@ final class Http
      */
     private static function encode(array $payload): string
     {
-        return json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        if ($json !== false) {
+            return $json;
+        }
+
+        // В payload попала битая кодировка (например, вывод внешней программы):
+        // чистим не-UTF8 и пробуем ещё раз, чтобы не отдавать 500-фатал.
+        $clean = self::toUtf8($payload);
+        $json = json_encode($clean, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+
+        return $json !== false ? $json : '{"status":"error","message":"encoding failed"}';
+    }
+
+    /**
+     * Рекурсивно приводит строки к валидному UTF-8.
+     *
+     * @param mixed $value
+     * @return mixed
+     */
+    private static function toUtf8($value)
+    {
+        if (is_array($value)) {
+            $out = [];
+
+            foreach ($value as $key => $item) {
+                $out[is_string($key) ? self::toUtf8($key) : $key] = self::toUtf8($item);
+            }
+
+            return $out;
+        }
+
+        if (!is_string($value)) {
+            return $value;
+        }
+
+        if (function_exists('mb_check_encoding') && mb_check_encoding($value, 'UTF-8')) {
+            return $value;
+        }
+
+        if (function_exists('mb_convert_encoding')) {
+            $converted = @mb_convert_encoding($value, 'UTF-8', 'Windows-1251');
+
+            if (is_string($converted)) {
+                return $converted;
+            }
+        }
+
+        return preg_replace('/[^\x09\x0A\x0D\x20-\x7E]/', '?', $value) ?? '';
     }
 }

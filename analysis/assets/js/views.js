@@ -1,6 +1,6 @@
-import { els, state } from './store.js';
-import { setBadge } from './utils.js';
-import { renderTable } from './table.js';
+import { els, state } from './store.js?v=15';
+import { setBadge, updateProcessUI } from './utils.js?v=15';
+import { renderTable } from './table.js?v=15';
 
 // ---------- Состояния-вью ----------
 
@@ -9,6 +9,7 @@ function switchToUpload() {
     els.tracksView.hidden = true;
     els.processBtn.disabled = true;
     setBadge('idle');
+    updateProcessUI();
 }
 
 function switchToTracks(rows) {
@@ -18,35 +19,36 @@ function switchToTracks(rows) {
     const active = state.mode === 'processing' || state.mode === 'poll';
     els.processBtn.disabled = active;
     els.stopBtn.hidden = !active;
+    updateProcessUI();
 }
 
-function showBanner(text, folders) {
-    els.banner.hidden = false;
-    els.bannerText.textContent = text;
+let bannerTimer = null;
 
-    els.bannerFoldersToggle.hidden = !(folders && folders.length > 0);
-    els.bannerFolders.innerHTML = '';
-
-    if (folders && folders.length > 0) {
-        folders.forEach((folder) => {
-            const dir = document.createElement('div');
-            dir.className = 'dir';
-            dir.textContent = `music/sorted/${folder.name}/`;
-            const sub = document.createElement('ul');
-            (folder.files || []).forEach((f) => {
-                const li = document.createElement('li');
-                li.className = 'file';
-                li.textContent = f;
-                sub.appendChild(li);
-            });
-            dir.appendChild(sub);
-            els.bannerFolders.appendChild(dir);
-        });
+// Плавно показываем баннер, через 3 секунды плавно прячем.
+function showBanner(text) {
+    if (bannerTimer) {
+        clearTimeout(bannerTimer);
+        bannerTimer = null;
     }
+
+    els.bannerText.textContent = text;
+    els.banner.hidden = false;
+
+    // Переход display:none -> flex нельзя анимировать сразу, ждём следующий кадр.
+    requestAnimationFrame(() => requestAnimationFrame(() => els.banner.classList.add('is-visible')));
+
+    bannerTimer = setTimeout(() => hideBanner(), 3000);
 }
 
 function hideBanner() {
-    els.banner.hidden = true;
+    if (bannerTimer) {
+        clearTimeout(bannerTimer);
+        bannerTimer = null;
+    }
+    els.banner.classList.remove('is-visible');
+    setTimeout(() => {
+        if (!els.banner.classList.contains('is-visible')) els.banner.hidden = true;
+    }, 350);
 }
 
 export { switchToUpload, switchToTracks, showBanner, hideBanner };

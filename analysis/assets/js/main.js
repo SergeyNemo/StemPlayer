@@ -1,24 +1,20 @@
-import { els, state, TERMINAL_STATES } from './store.js';
-import { fetchJson, setBadge, toggleLog, renderLogs, appendLog } from './utils.js';
-import { initPlayer } from './player.js';
-import { switchToUpload, switchToTracks, showBanner } from './views.js';
-import { sortBy } from './sort.js';
-import { bindUpload } from './upload.js';
-import { startProcessing, requestStop, startPolling } from './analysis.js';
+import { els, state } from './store.js?v=15';
+import { fetchJson, setBadge, renderLogs, appendLog } from './utils.js?v=15';
+import { initPlayer } from './player.js?v=15';
+import { switchToUpload, switchToTracks } from './views.js?v=15';
+import { sortBy } from './sort.js?v=15';
+import { bindUpload } from './upload.js?v=15';
+import { startProcessing, requestStop, startPolling } from './analysis.js?v=15';
 
 // ---------- Инициализация ----------
 
 function init() {
     bindUpload();
     initPlayer();
-    els.logToggle.addEventListener('click', () => toggleLog());
-    els.bannerFoldersToggle.addEventListener('click', () => {
-        els.bannerFolders.hidden = !els.bannerFolders.hidden;
-        els.bannerFoldersToggle.textContent = els.bannerFolders.hidden ? 'Папки ▾' : 'Папки ▴';
-    });
 
     els.processBtn.addEventListener('click', startProcessing);
     els.stopBtn.addEventListener('click', requestStop);
+    els.addBtn.addEventListener('click', () => els.fileInput.click());
 
     document.querySelectorAll('th[data-sort]').forEach((th) =>
         th.addEventListener('click', () => sortBy(th.dataset.sort))
@@ -29,7 +25,12 @@ function init() {
         fetchJson('get_progress'),
     ])
         .then(([inbox, progress]) => {
-            setBadge(progress.status || 'idle');
+            // На старте отражаем только живой прогон. «complete» в progress.json —
+            // это остаток прошлого запуска: paints COMPLETE на 3 секунды и
+            // путает («я же ничего не нажимал»). Настоящий финал покажет
+            // опрос, когда закончится прогон в этой сессии.
+            setBadge(progress.status === 'running' ? 'running' : 'idle');
+            state.stemgenRunning = !!(inbox.stemgen_running || progress.stemgen_running);
 
             if (inbox.rows && inbox.rows.length === 0) {
                 switchToUpload();
@@ -38,16 +39,12 @@ function init() {
 
             state.rows = inbox.rows;
             switchToTracks(state.rows);
-            renderLogs(progress.log || []);
 
             if (progress.status === 'running') {
                 // в другом окне уже идёт обработка — просто следуем
+                renderLogs(progress.last_message);
                 appendLog({ time: '--:--:--', type: 'warning', message: 'Обнаружен идущий анализ (другое окно). Слежу за прогрессом.' });
                 startPolling(false);
-            } else if (TERMINAL_STATES.has(progress.status)) {
-                if (progress.status === 'complete' && inbox.rows.length > 0) {
-                    showBanner(`Последний прогон: ${progress.log.length > 0 ? 'завершён.' : ''}`, progress.folders || []);
-                }
             }
         })
         .catch(() => {

@@ -1,5 +1,5 @@
-import { state, els } from './store.js';
-import { appendLog } from './utils.js';
+import { state } from './store.js?v=15';
+import { appendLog } from './utils.js?v=15';
 
 // ---------- Плеер ----------
 
@@ -17,12 +17,10 @@ function initPlayer() {
     audio.addEventListener('pause', () => setPlayGlyph(state.play.name, 'play'));
     audio.addEventListener('loadedmetadata', () => updatePlayBar());
     audio.addEventListener('ended', () => {
-        if (els.queueCheck.checked && playNextInQueue()) {
-            return;
-        }
         setPlayGlyph(state.play.name, 'play');
         resetPlayBar(state.play.name);
         state.play.name = null;
+        playNextInQueue();
     });
     audio.addEventListener('error', () => {
         setPlayGlyph(state.play.name, 'play');
@@ -31,20 +29,36 @@ function initPlayer() {
     audio.addEventListener('timeupdate', () => updatePlayBar());
 }
 
-function buildPlayButton(name) {
+// Значок play: inline-SVG. Раньше был «треугольник из бордеров» на боксе 0x0,
+// который схлопывался под глобальным box-sizing:border-box — кнопка выглядела
+// пустой. SVG рисуется всегда и наследует цвет кнопки через currentColor.
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function playIcon() {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('class', 'stem-glyph');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', 'M8 5.5v13l11-6.5z');
+    svg.appendChild(path);
+    return svg;
+}
+
+function buildPlayButton(name, done) {
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = 'play-btn';
+    btn.className = 'chan-play card-play';
     btn.dataset.name = name;
-    btn.title = 'Прослушать';
+    btn.disabled = !done;
 
-    const glyph = document.createElement('span');
-    glyph.className = 'play-glyph';
-    const pause = document.createElement('span');
-    pause.className = 'play-pause';
-    pause.append(document.createElement('span'), document.createElement('span'));
-    btn.append(glyph, pause);
+    const pPlay = document.createElement('span');
+    pPlay.className = 'stem-pause';
+    pPlay.append(document.createElement('i'), document.createElement('i'));
+    btn.append(playIcon(), pPlay);
 
+    btn.title = done ? 'Играть / пауза' : 'Не обработан';
     btn.addEventListener('click', (e) => {
         e.stopPropagation();
         togglePlay(name);
@@ -55,6 +69,9 @@ function buildPlayButton(name) {
 function togglePlay(name) {
     const audio = state.play.audio;
     if (!audio) return;
+
+    const row = state.rowRefs.get(name);
+    if (!row || row.row.status !== 'done' || state.mode === 'processing' || state.mode === 'poll') return;
 
     if (state.play.name === name && audio.src !== '') {
         if (audio.paused) audio.play().catch(() => {});
@@ -79,8 +96,8 @@ function togglePlay(name) {
 function setPlayGlyph(name, mode) {
     const ref = state.rowRefs.get(name);
     if (!ref || !ref.playBtn) return;
-    ref.playBtn.classList.toggle('is-playing', mode === 'pause');
-    ref.playBtn.title = mode === 'pause' ? 'Пауза' : 'Прослушать';
+    ref.playBtn.classList.toggle('is-active', mode === 'pause');
+    ref.playBtn.title = mode === 'pause' ? 'Пауза' : 'Играть / пауза';
 }
 
 function resetPlayBar(name) {
@@ -147,14 +164,26 @@ function applyPlaybackState() {
     updatePlayBar();
 }
 
-// «Подряд»: по окончании трека включаем следующий из текущего порядка списка.
+// «Подряд»: по окончании трека включаем следующий из текущего порядка списка,
+// по кругу. Перескакиваем необработанные треки, у них play заблокирован.
 function playNextInQueue() {
-    const list = state.rows.map((r) => r.name);
-    if (list.length === 0) return false;
-    const cur = list.indexOf(state.play.name);
-    const next = cur >= 0 ? list[(cur + 1) % list.length] : list[0];
+    const playable = state.rows.filter((r) => r.status === 'done').map((r) => r.name);
+    if (playable.length === 0) return false;
+    const cur = state.play.name;
+    const idx = cur ? playable.indexOf(cur) : -1;
+    const next = idx >= 0 ? playable[(idx + 1) % playable.length] : playable[0];
     togglePlay(next);
     return true;
 }
 
-export { initPlayer, buildPlayButton, bindSeek, applyPlaybackState };
+// Кнопки play: заблокированы, пока идёт обработка (текущее окно или другое).
+function syncPlayButtons() {
+    const running = state.mode === 'processing' || state.mode === 'poll';
+    state.rowRefs.forEach((ref) => {
+        const done = ref.row.status === 'done';
+        ref.playBtn.disabled = running || !done;
+        ref.playBtn.title = running ? 'Обработка идёт' : done ? 'Играть / пауза' : 'Не обработан';
+    });
+}
+
+export { initPlayer, buildPlayButton, bindSeek, applyPlaybackState, syncPlayButtons };

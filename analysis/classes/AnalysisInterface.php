@@ -8,11 +8,12 @@ declare(strict_types=1);
 interface AnalysisInterface
 {
     /**
-     * Запускает анализатор для одного файла.
+     * Запуск анализа одного файла.
      *
      * @param  string $filePath   Абсолютный путь к аудиофайлу.
-     * @param  callable(float $fraction, string $phase): void|null $onProgress Опциональный колбэк живого прогресса.
-     * @param  callable(): bool|null $stopCheck  Вернуть true — процесс анализа будет прерван.
+     * @param  callable(): bool|null $stopCheck  Вернуть true — прервать анализ.
+     * @param  callable(string): void|null $onStage Получить идентификатор текущего
+     *         этапа ("load", "bpm", "key", "meta") в момент его наступления.
      * @return array{
      *   status: 'success'|'error',
      *   bpm?: int,
@@ -21,5 +22,5 @@ interface AnalysisInterface
      *   stderr?: string
      * }
      */
-    public function runAnalysis(string $filePath, ?callable $onProgress = null, ?callable $stopCheck = null): array;
+    public function runAnalysis(string $filePath, ?callable $stopCheck = null, ?callable $onStage = null): array;
 }

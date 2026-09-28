@@ -1,0 +1,354 @@
+/* Модуль «Стемы»: стили поверх общих (base + components + table). */
+
+/* ---------- Таблица ---------- */
+.stem-table td { padding: 14px 28px; }
+
+/* ---------- Карточка трека ---------- */
+.track-card {
+    padding: 14px 16px; border-radius: 12px;
+    border: 1px solid var(--panel-border);
+}
+
+.meta-strip {
+    display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px;
+}
+.meta-item {
+    display: flex; flex-direction: column; justify-content: center; gap: 2px;
+    background: rgba(255, 255, 255, .025);
+    border: 1px solid var(--panel-border); border-radius: 10px;
+    padding: 8px 10px;
+}
+.meta-label {
+    font-size: 10.5px; font-weight: 700; letter-spacing: 1.2px;
+    text-transform: uppercase; color: var(--muted);
+}
+.meta-value {
+    font-family: var(--mono); font-size: 19px; line-height: 1.15;
+    color: var(--info);
+}
+.meta-name {
+    flex: 1 1 200px; min-width: 140px;
+    position: relative; overflow: hidden;
+}
+/* Задний EQ играющего трека — под названием, в том же боксе.
+   absolute, поэтому не влияет на ширину (иначе дёргалась бы вся полоса),
+   а overflow:hidden у .meta-name обрезает его по скруглённым углам. */
+.name-eq {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    display: block;
+    z-index: 0; pointer-events: none;
+    opacity: 0; transition: opacity .25s ease;
+}
+.meta-name.is-live { border-color: rgba(255, 148, 56, .35); }
+.meta-name.is-live .name-eq { opacity: 1; }
+.meta-name .meta-value {
+    position: relative; z-index: 1;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.card-main {
+    flex: 1; min-width: 0;
+    display: flex; flex-direction: column; gap: 10px;
+}
+
+.card-stem-row {
+    display: flex; align-items: stretch;
+}
+
+.meta-play {
+    flex: 0 0 auto; min-width: 54px;
+    align-items: center;
+}
+.meta-play-btn {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 20px;
+}
+
+.card-empty {
+    display: flex; flex-direction: column; flex: 1; align-items: center; gap: 10px;
+    padding: 16px;
+    border: 1px dashed var(--panel-border); border-radius: 10px;
+    background: rgba(255, 255, 255, .012);
+}
+.card-progress { width: 100%; margin-top: 0; }
+
+/* Подпись текущего этапа под шкалой. Этап приходит из демона
+   (current_stage_label) и меняется без перерисовки таблицы, поэтому текст
+   не должен прыгать: фиксированная ширина не нужна, но перенос и
+   выравнивание по центру - да. */
+.card-stage,
+.cell-stage {
+    font-size: 11.5px; font-weight: 600; letter-spacing: .2px;
+    color: var(--info); text-align: center;
+    min-height: 14px;
+}
+
+/* ---------- Канал стема ---------- */
+.stem-list {
+    flex: 1; min-width: 0;
+    display: flex; flex-direction: column; gap: 8px;
+}
+
+.chan-pair {
+    display: flex; flex-direction: row; align-items: stretch; gap: 8px;
+}
+.chan-pair.is-muted { opacity: .6; }
+.chan-pair.is-absent { opacity: .45; }
+.chan-pair.is-playing .chan { border-color: rgba(255, 123, 0, .55); }
+
+.chan {
+    position: relative; flex: 1; min-width: 0; min-height: 88px;
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 7px 12px 8px 9px;
+    border: 1px solid var(--panel-border); border-radius: 10px;
+    background: rgba(255, 255, 255, .02);
+    transition: border-color .15s ease, opacity .15s ease;
+}
+
+.chan-spec {
+    position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+    border-radius: inherit; pointer-events: none;
+    z-index: 0; opacity: .25;
+}
+.chan-pair.is-muted .chan-spec { opacity: .14; }
+.chan-pair.is-playing .chan-spec { opacity: .4; }
+
+/* ---------- Элемент справа от канала: EQ + галка включения ---------- */
+/* Ширину всей правой колонки задаёт подпись громкости, и она зафиксирована
+   по самой широкой строке: calc(4ch + 2px) — это ровно «100%» в моноширинном
+   шрифте. Поэтому «0%» → «100%» НЕ меняет ширину: .chan не пересчитывается,
+   canvas не теряет bitmap, и колонка не прыгает туда-сюда. */
+.chan-right {
+    flex: 0 0 auto;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 6px;
+}
+
+/* ---------- Уровнемер стема (вертикальная громкость в канале) ---------- */
+.chan-eq-pct {
+    flex: 0 0 auto;
+    width: calc(4ch + 2px);
+    font-family: var(--mono); font-size: 9.5px; line-height: 1;
+    letter-spacing: .5px;
+    color: var(--info);
+    text-align: center; white-space: nowrap;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, .7);
+}
+.chan-eq {
+    position: relative;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 2.5px;
+    width: 18px; flex: 1 1 auto; min-height: 24px;
+    padding: 3px 2px;
+    box-sizing: border-box;
+    overflow: hidden;
+    background: rgba(10, 9, 8, .55); border-radius: 6px;
+    cursor: ns-resize; touch-action: none; user-select: none;
+    transition: border-color .15s ease;
+}
+.chan-eq:hover { border: 1px solid rgba(255, 148, 56, .4); }
+/* Ручка громкости. Её БОКС жёстко равен внутренней области .chan-eq
+   (top/bottom: 0), а видимая высота задаётся scaleY от нижнего края.
+   Так проценты вообще не участвуют в раскладке, и 100% физически не может
+   вылезти за границу элемента. Раньше здесь была арифметика в единицах
+   (height в % + bottom в px), и она дважды врала: с max-height в px ручка
+   упиралась в потолок на ~90%, а без него на 100% верх выходил на пиксель
+   за край. scaleY от низа обе проблемы снимает по построению. */
+.chan-eq .eq-fill {
+    position: absolute;
+    top: 0; bottom: 0; left: 50%;
+    width: 10px;
+    transform: translateX(-50%) scaleY(0);
+    transform-origin: bottom center;
+    border-radius: 4px;
+    background: linear-gradient(to top,
+        rgba(255, 123, 0, .35), rgba(255, 148, 56, .22));
+    box-shadow: 0 0 6px rgba(255, 123, 0, .25);
+    transition: transform .08s ease;
+    z-index: 0;
+}
+.chan-pair.is-muted .chan-right .chan-eq .eq-fill { background: rgba(255, 255, 255, .15); box-shadow: none; }
+.chan-eq i {
+    position: relative; flex: 1; width: 10px; min-height: 0; border-radius: 2px;
+    background: linear-gradient(to top, var(--accent), var(--info));
+    box-shadow: 0 0 4px rgba(255, 123, 0, .35);
+    transform-origin: bottom;
+    transform: scaleY(var(--high, .12));
+    transition: transform .05s linear, opacity .15s ease;
+    pointer-events: none;
+    z-index: 1;
+}
+.chan-pair:not(.is-playing) .chan-right .chan-eq i { opacity: .9; }
+.chan-pair.is-muted .chan-right .chan-eq i { opacity: .35; }
+
+/* Галка мута под EQ: обычное состояние — тонкий бордер, замьючено — оранжевая «ручка» */
+.chan-mute {
+    appearance: none; -webkit-appearance: none; margin: 0;
+    width: 14px; height: 14px; flex: 0 0 auto;
+    border-radius: 4px;
+    border: 1px solid var(--panel-border);
+    background: rgba(255, 255, 255, .04);
+    cursor: pointer;
+    position: relative;
+    transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+}
+.chan-mute:hover:not(:disabled) { border-color: var(--info); box-shadow: 0 0 6px rgba(255, 148, 56, .3); }
+.chan-mute:checked {
+    background: linear-gradient(to top, var(--accent), var(--info));
+    border-color: transparent;
+    box-shadow: 0 0 6px rgba(255, 123, 0, .4);
+}
+.chan-mute:checked::after {
+    content: '';
+    position: absolute; left: 4px; top: 1px;
+    width: 4px; height: 8px;
+    border: solid #fff; border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+.chan-mute:disabled { opacity: .3; cursor: not-allowed; }
+.chan-mute:focus-visible { outline: 1px solid var(--info); }
+.chan-pair.is-muted .chan-mute { opacity: .8; }
+
+.chan-play {
+    flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%;
+    border: 1px solid var(--panel-border); background: rgba(255, 255, 255, .05);
+    color: #e7dfd3; cursor: pointer; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: border-color .15s ease, color .15s ease, background .15s ease,
+                box-shadow .15s ease, transform .15s ease;
+}
+.chan-play:hover:not(:disabled) {
+    color: var(--info); border-color: var(--info);
+    box-shadow: 0 0 8px rgba(255, 148, 56, .35);
+}
+.chan-play:active:not(:disabled) { transform: scale(.92); }
+.chan-play:disabled { opacity: .3; cursor: not-allowed; }
+.chan-play.is-active {
+    background: var(--accent); border-color: transparent; color: #fff;
+    box-shadow: 0 0 10px rgba(255, 123, 0, .5);
+}
+.chan-play .stem-glyph {
+    display: block; flex: 0 0 auto;
+    width: 13px; height: 13px;
+    fill: currentColor;
+}
+.chan-play .stem-pause { display: none; gap: 3px; align-items: center; }
+.chan-play .stem-pause i { width: 3px; height: 11px; border-radius: 1px; background: currentColor; }
+.chan-play.is-active .stem-glyph { display: none; }
+.chan-play.is-active .stem-pause { display: flex; }
+.chan-play.card-play {
+    width: 30px; height: 30px;
+    /* Класс общий с модулем «Обработка», и table.css (грузится и здесь) даёт
+       .chan-play.card-play margin-right:12px под свой бокс. Здесь бокс свой и
+       центрированный, поэтому отступ только уводит круг от центра — гасим. */
+    margin-right: 0; align-self: center;
+}
+.chan-time, .chan-dur { font-family: var(--mono); font-size: 10.5px; color: var(--muted); min-width: 30px; }
+.chan-row-time {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 2px; position: relative; z-index: 1;
+}
+/* Подпись стема — та же строка, что и время: слева, время остаётся справа.
+   auto-отступ именно у времени: иначе space-between разнёс бы группу
+   «время / длительность» по всей строке и цифры оказались бы в середине. */
+.stem-chan-name {
+    font-family: var(--mono); font-size: 11px; color: var(--info);
+    letter-spacing: .5px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.chan-time { text-align: right; margin-left: auto; }
+.chan-dur { text-align: left; }
+.chan-sep { color: var(--muted); font-size: 10.5px; }
+
+/* ---------- Состояния строк: подсветка рамки карточки ---------- */
+.tracks-table tr.row-processing td,
+.tracks-table tr.row-error td,
+.tracks-table tr.row-done td { background: transparent; }
+.tracks-table tr.row-processing .track-card {
+    border-color: rgba(255, 148, 56, .5);
+    transition: border-color .35s ease;
+}
+.tracks-table tr.row-error .track-card { border-color: rgba(248, 81, 73, .5); }
+.tracks-table tr.row-done .track-card { border-color: var(--panel-border); }
+
+/* ---------- Чип фазы в карточке ---------- */
+.stem-chip,
+.card-progress {
+    animation: stem-fade-in .22s ease;
+}
+.stem-chip {
+    display: inline-block; padding: 4px 12px; border-radius: 999px;
+    font-size: 11.5px; font-weight: 700; letter-spacing: .3px;
+    background: rgba(255, 255, 255, .06); color: var(--muted);
+    white-space: nowrap; max-width: 100%;
+    transition: background-color .25s ease, color .25s ease;
+}
+.stem-chip.ok { background: rgba(63, 185, 80, .14); color: var(--success); }
+.stem-chip.err { background: rgba(248, 81, 73, .14); color: var(--error); }
+.stem-chip.run { background: rgba(255, 148, 56, .14); color: var(--info); }
+.stem-chip.wait { background: rgba(255, 255, 255, .04); color: var(--muted); }
+
+@keyframes stem-fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: none; }
+}
+
+/* ---------- Экран-замок: ещё нет обработанных треков ---------- */
+.lock-screen {
+    max-width: 460px; margin: 56px auto 0; padding: 34px 30px;
+    border: 1px solid var(--panel-border); border-radius: 16px;
+    background: var(--panel); text-align: center;
+}
+.lock-screen h2 { margin: 0 0 10px; font-size: 19px; color: var(--text); }
+.lock-screen p { margin: 0 0 20px; font-size: 14px; line-height: 1.55; color: var(--muted); }
+
+/* ---------- Адаптив ----------
+   Десктоп (≥1101px) не трогаем: всё ниже только внутри @media.
+   Узкий экран — это телефон или узкое окно, где карточка из 4 каналов
+   в один столбик требовала 1013px по ширине. Считаем: полоса каналов
+   становится 2 колонками (46%), потом одной, название занимает свою
+   строку. Подпись стема отдельной колонкой больше не мешает: она живёт
+   в строке времени. */
+@media (max-width: 1100px) {
+    .stem-table { min-width: 0; width: 100%; }
+    .stem-table td { padding: 12px 16px; }
+
+    /* Каналы в 2 колонки: главный выигрыш по ширине. */
+    .stem-list { flex-direction: row; flex-wrap: wrap; }
+    .chan-pair { flex: 1 1 46%; min-width: 0; }
+
+    /* То же, что в table.css для «Обработки»: имя из имени файла не имеет
+       точек переноса и держало min-content карточки на 774px — таблица
+       уезжала за экран и контент обрезался. Здесь переносим по словам,
+       а если слово длинное (сплошные подчёркивания) — в любом месте. */
+    .meta-name { min-width: 0; }
+    .meta-name .meta-value { white-space: normal; overflow-wrap: anywhere; }
+}
+
+@media (max-width: 820px) {
+    .track-card { padding: 12px; }
+    .stem-table td { padding: 10px 12px; }
+    /* Название — отдельной строкой, BPM/Key/Play под ним влезают в строку. */
+    .meta-name { flex: 1 1 100%; }
+    .meta-item { padding: 7px 9px; }
+    .meta-value { font-size: 17px; }
+    .chan { min-height: 74px; }
+}
+
+@media (max-width: 620px) {
+    /* Один канал в строке: на 390px две колонки слишком узки для волны. */
+    .chan-pair { flex: 1 1 100%; }
+    .stem-table td { padding: 8px; }
+    .track-card { padding: 10px; }
+    .chan-right { flex-direction: row; gap: 8px; }
+    .chan-eq { min-height: 44px; }
+}
+
+/* Тефон лежит на боку: ширина большая, высота — нет. Экономим вертикаль,
+   каналы уже в 2 колонки из правила выше. */
+@media (orientation: landscape) and (max-height: 560px) {
+    .track-card { padding: 10px 12px; }
+    .card-main { gap: 8px; }
+    .chan { min-height: 64px; }
+    .chan-eq { min-height: 40px; }
+    .meta-strip { gap: 8px; }
+}

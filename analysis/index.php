@@ -1,30 +1,48 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * Страница модуля «Обработка».
+ *
+ * Это PHP, а не статический HTML, потому что здесь нужна серверная взаимная
+ * блокировка: пока идёт генерация стемов, страница недоступна даже по
+ * прямой ссылке (core/PageGuard.php).
+ */
+
+require_once __DIR__ . '/../config.php';
+require_once __DIR__ . '/../core/RunState.php';
+require_once __DIR__ . '/../core/PageGuard.php';
+
+PageGuard::enforce(RunState::ANALYSIS);
+?>
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>StemPlayer — Обработка</title>
-    <link rel="stylesheet" href="assets/css/base.css">
-    <link rel="stylesheet" href="assets/css/components.css">
-    <link rel="stylesheet" href="assets/css/table.css">
+    <link rel="stylesheet" href="assets/css/base.css?v=15">
+    <link rel="stylesheet" href="assets/css/components.css?v=15">
+    <link rel="stylesheet" href="assets/css/table.css?v=15">
 </head>
 <body>
     <div class="app">
         <header class="header">
             <div class="brand">
                 <span class="brand-dot"></span>
-                <h1>StemPlayer <small>analysis module</small></h1>
+                <h1>StemPlayer <small>Обработка</small></h1>
             </div>
+            <nav class="nav">
+                <a href="../index.php" id="nav-home">Главная</a>
+                <a href="index.php" class="active">Обработка</a>
+                <a href="../stemgen/index.php" id="nav-stemgen">Стемы</a>
+            </nav>
             <div class="status-badge" id="status-badge" data-state="idle">idle</div>
         </header>
 
-        <section class="page-head">
-            <h2>Обработка треков</h2>
-            <p id="page-subtitle">Проанализируйте BPM и тональность, а затем треки автоматически разложатся по папкам.</p>
-        </section>
-
         <!-- Состояние 1: inbox пуст -> загрузка -->
-        <section class="upload-zone" id="upload-zone">
+        <section class="upload-zone" id="upload-zone" hidden>
             <div class="dropzone" id="dropzone" tabindex="0">
                 <div class="dz-icon">&#9834;</div>
                 <p class="dz-title">Папка inbox пуста</p>
@@ -43,26 +61,22 @@
             <div class="toolbar">
                 <div class="toolbar-left">
                     <button class="btn btn-primary" id="process-btn" type="button">Обработать</button>
+                    <button class="btn btn-ghost" id="add-btn" type="button">+ Добавить треки</button>
                     <button class="btn btn-ghost btn-stop" id="stop-btn" type="button" hidden>■ Стоп</button>
-                    <label class="queue-toggle" id="queue-toggle" title="Треки играют по списку друг за другом">
-                        <input type="checkbox" id="queue-check">
-                        <span class="q-slider"></span>
-                        <span class="q-label">Подряд</span>
-                    </label>
                     <span class="toolbar-meta">
                         <span id="track-total-text">Треков нет</span>
                     </span>
                 </div>
-                <div class="overall-progress">
-                    <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
-                    <span class="progress-label" id="progress-label">0%</span>
+                <div class="toolbar-right">
+                    <div class="overall-progress" id="overall-progress" hidden>
+                        <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
+                    </div>
+                    <div class="log-line" id="log-line" hidden></div>
                 </div>
             </div>
 
             <div class="banner" id="banner" hidden>
                 <span class="banner-text" id="banner-text"></span>
-                <button class="btn-link" id="banner-folders-toggle" type="button" hidden>Папки ▾</button>
-                <div class="banner-folders" id="banner-folders" hidden></div>
             </div>
 
             <div class="table-wrap">
@@ -80,14 +94,12 @@
                 </table>
             </div>
         </section>
-
-        <!-- Диагностический журнал (сворачиваемый) -->
-        <section class="log-panel" id="log-panel">
-            <button class="log-toggle" id="log-toggle" type="button">Журнал <span class="log-caret"></span></button>
-            <div class="console" id="console" hidden></div>
-        </section>
     </div>
 
-    <script type="module" src="assets/js/main.js"></script>
+    <!-- Общее UI-ядро: бейдж статуса + блокировка ссылок в шапке.
+         Классический скрипт, а не модуль: нужен и «Обработке» (ES-модули),
+         и «Стемам» (window.StemGen), и выполняется раньше них. -->
+    <script src="assets/js/core/ui.js?v=15"></script>
+    <script type="module" src="assets/js/main.js?v=15"></script>
 </body>
 </html>

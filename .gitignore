@@ -1,8 +1,15 @@
 # Служебные данные
 storage/
+logs/
 __pycache__/
 
 # Пользовательские аудиофайлы (гигабайты — не в гит)
 music/inbox/
 music/sorted/
 music/stems/
+
+# venv стража (torch+cu121 ~ 5+ ГБ — только локально)
+venv_demucs/
+
+# Выгрузка переписки (~16 МБ), коду не нужна
+docs/stemplayer.json

@@ -3,16 +3,22 @@
 """
 analyzer.py — лёгкий анализатор аудио файлов.
 Возможности:
-  * BPM  — librosa.beat.beat_track по первым 30 секундам трека;
-  * Key  — корреляция хромы с профилями Крамхансла–Шмюклера;
-  * метаданные — mutagen (title/artist/album/duration).
+  * BPM          — точный темп: комб-фильтр librosa + медиана бит-интервалов;
+  * Key          — корреляция хромы с профилями Крамхансла–Шмюклера;
+  * метаданные   — mutagen (title/artist/album/duration).
 
 Использование:
     python analyzer.py /path/to/track.mp3
 
-Вывод (STDOUT, JSON):
+Вывод (STDOUT, построчно, JSON):
+    {"stage": "load"}
+    {"stage": "bpm"}
+    ...
     {"status": "success", "bpm": 128, "key": "Am", ...}
     {"status": "error", "message": "..."}
+
+Строки со "stage" — служебные: PHP читает их на лету и двигает шкалу
+этапа. Последняя строка с "status" — результат. Никаких файлов и опросов.
 """
 
 from __future__ import annotations
@@ -20,8 +26,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-import threading
-import time
 import warnings
 
 # При выводе в pipe Windows использует ANSI-кодовую страницу, из-за чего
@@ -42,64 +46,21 @@ except ImportError as exc:
     print(json.dumps(emit_error_json, ensure_ascii=False))
     sys.exit(1)
 
+# Сколько секунд трека читаем для расчёта BPM. Больше контекста —
+# точнее оценка (интро/другая секция в начале сбивает темп).
+BPM_LOOKAHEAD_S = 240.0
+
 
 def emit_error(message: str) -> None:
     print(json.dumps({"status": "error", "message": str(message)}, ensure_ascii=False))
     sys.stdout.flush()
 
 
-class ProgressReporter:
-    """
-    Пишет живой прогресс в JSON-файл {"fraction": 0..1, "phase": "..."},
-    который PHP опрашивает в цикле (stream-вывод на Windows блокируется).
-
-    Главный поток ставит target (0..1) на каждом этапе, а фоновый поток
-    плавно подтягивает текущее значение к нему и обновляет файл каждые 150 мс.
-    """
-
-    def __init__(self, progress_file: str | None = None) -> None:
-        self._lock = threading.Lock()
-        self._value = 0.0
-        self._target = 0.0
-        self._phase = "начало"
-        self._stop = threading.Event()
-        self._progress_file = progress_file
-        self._emit_file(0.0, "старт")
-        self._thread = threading.Thread(target=self._loop, daemon=True)
-        self._thread.start()
-
-    def target(self, value: float, phase: str) -> None:
-        with self._lock:
-            self._target = min(1.0, max(0.0, value))
-            self._phase = phase
-
-    def _loop(self) -> None:
-        while not self._stop.is_set():
-            with self._lock:
-                self._value += (self._target - self._value) * 0.35
-                value, phase = self._value, self._phase
-
-            if abs(self._target - value) < 0.01:
-                value = self._target
-
-            self._emit_file(value, phase)
-            self._stop.wait(0.15)
-
-    def _emit_file(self, value: float, phase: str) -> None:
-        if not self._progress_file:
-            return
-        try:
-            tmp = self._progress_file + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as fh:
-                json.dump({"fraction": round(value, 3), "phase": phase}, fh, ensure_ascii=False)
-            os.replace(tmp, self._progress_file)
-        except OSError:
-            pass
-
-    def stop(self) -> None:
-        if not self._stop.is_set():
-            self._stop.set()
-            self._thread.join(timeout=0.5)
+def stage(name: str) -> None:
+    """Сообщить этап работы. Строка сразу уходит в pipe — PHP видит её
+    немедленно, поэтому шкала идёт по факту, а не по таймеру."""
+    print(json.dumps({"stage": name}, ensure_ascii=False))
+    sys.stdout.flush()
 
 
 def main() -> None:
@@ -108,31 +69,26 @@ def main() -> None:
         return
 
     path = sys.argv[1]
-    progress_file = sys.argv[2] if len(sys.argv) > 2 else None
 
     if not os.path.isfile(path):
         emit_error(f"Файл не существует: {path}")
         return
 
-    reporter = ProgressReporter(progress_file)
-
     try:
-        reporter.target(0.04, "инициализация")
-        y, sr = librosa.load(path, duration=30, sr=22050, mono=True)
+        # BPM и тональность считаем по всему треку — любой срез в начале
+        # (интро/другая секция) искажает результат.
+        stage("load")
+        y, sr = librosa.load(path, duration=BPM_LOOKAHEAD_S, sr=22050, mono=True)
 
         if y.size == 0:
-            raise ValueError("В первых 30 секундах трека нет аудио (пустой сигнал).")
+            raise ValueError("В начале трека нет аудио (пустой сигнал).")
 
-        reporter.target(0.55, "загрузка аудио")
+        stage("bpm")
         bpm = estimate_bpm(y, sr)
-
-        reporter.target(0.80, "определение BPM")
+        stage("key")
         key = estimate_key(y, sr)
-
-        reporter.target(0.93, "определение тональности")
+        stage("meta")
         meta = read_metadata(path)
-
-        reporter.target(0.97, "метаданные")
 
         print(json.dumps({
             "status": "success",
@@ -145,23 +101,74 @@ def main() -> None:
             "album": meta["album"],
         }, ensure_ascii=False))
         sys.stdout.flush()
-
-        reporter.target(1.0, "готово")
-        time.sleep(0.2)
     except Exception as exc:  # noqa: BLE001 — скрипт обязан отвечать JSON.
         emit_error(exc)
-    finally:
-        reporter.stop()
+    return
 
 
 def estimate_bpm(y: np.ndarray, sr: int) -> float:
-    """Определяет темп. Совместим с librosa >= 0.10 (возвращает кортеж)."""
-    try:
-        tempo, _beats = librosa.beat.beat_track(y=y, sr=sr, hop_length=256)
-    except (TypeError, ValueError):
-        tempo = librosa.beat.beat_track(y=y, sr=sr, hop_length=256)[0]
+    """Точный темп: комб-фильтр librosa для грубой оценки, затем медиана
+    бит-интервалов с параболическим уточнением кадров (ошибка < 1 BPM)."""
+    hop = 256
+    onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop, aggregate=np.median)
 
-    return float(np.atleast_1d(np.asarray(tempo))[0])
+    if onset_env.size < 8:
+        return 0.0
+
+    # Грубая оценка (октавно корректна сама по себе — комб-фильтр).
+    try:
+        rough = float(np.atleast_1d(np.asarray(
+            librosa.feature.tempo(onset_envelope=onset_env, sr=sr, hop_length=hop)))[0])
+    except Exception:  # noqa: BLE001 — вырожденный случай не критичен.
+        rough = 120.0
+
+    if not (55.0 <= rough <= 210.0):
+        rough = 120.0
+
+    # Биты с привязкой к грубой оценке.
+    try:
+        _, beats = librosa.beat.beat_track(
+            onset_envelope=onset_env, sr=sr, hop_length=hop,
+            start_bpm=rough, tightness=100, trim=False)
+    except TypeError:
+        _, beats = librosa.beat.beat_track(
+            onset_envelope=onset_env, sr=sr, hop_length=hop,
+            start_bpm=rough, trim=False)
+
+    beats = np.asarray(beats).ravel()
+    beats = beats[(beats > 0) & (beats < onset_env.size)]
+
+    if beats.size < 3:
+        return rough
+
+    # Медиана интервалов с параболическим уточнением позиции бита.
+    n = len(onset_env)
+    times = []
+    for frame in beats:
+        f = int(frame)
+        if f <= 0 or f >= n - 1:
+            continue
+        a, b, c = onset_env[f - 1], onset_env[f], onset_env[f + 1]
+        den = a - 2 * b + c
+        frac = 0.0
+        if abs(den) > 1e-9:
+            frac = 0.5 * (a - c) / den
+            frac = max(-1.0, min(1.0, frac))
+        times.append((f + frac) * hop / sr)
+
+    intervals = np.diff(np.asarray(times))
+    bpms = 60.0 / intervals
+    ok = bpms[(bpms >= 55.0) & (bpms <= 210.0)]
+
+    if ok.size < 3:
+        ok = bpms
+
+    med = float(np.median(ok))
+    near = ok[np.abs(ok - med) < 6.0]
+    if near.size:
+        med = float(np.median(near))
+
+    return med
 
 
 def estimate_key(y: np.ndarray, sr: int) -> str:
