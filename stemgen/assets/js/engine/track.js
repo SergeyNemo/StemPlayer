@@ -13,10 +13,14 @@
         // Пересобираем стемы по строке таблицы: прежние объекты переиспользуются,
         // если URL стема не менялся (декодированный буфер сохраняется).
         addStems(row) {
+            const revs = row.stem_revs || {};
             const fresh = G.STEM_ORDER.map((kind) => {
                 const url = (row.stems && row.stems[kind]) || null;
+                const rev = revs[kind] || 0;
                 const prev = this.stems.find((s) => s.kind === kind);
-                return prev && prev.url === url ? prev : new Stem(kind, url);
+                // Ревизия в сравнении обязательна: после перегенерации URL тот
+                // же (id строится из имени/bpm/тональности), меняется mtime.
+                return prev && prev.url === url && prev.rev === rev ? prev : new Stem(kind, url, rev);
             });
             this.stems = fresh;
         }

@@ -35,6 +35,10 @@ const state = {
     pollTimer: null,
     stopping: false,
     sawRun: false,            // видели ли статус 'running' (для детекта «run исчез»)
+    // Ждём первого 'running' после нажатия «Обработать». До этого момента
+    // терминальный статус в progress.json — остаток ПРОШЛОГО прогона.
+    awaitingRun: false,
+    launchedAt: 0,            // когда нажали «Обработать» (мс)
     play: { audio: null, name: null },
 };
 

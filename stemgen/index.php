@@ -22,10 +22,10 @@ PageGuard::enforce(RunState::STEMGEN);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>StemPlayer — Стемы</title>
-    <link rel="stylesheet" href="../analysis/assets/css/base.css?v=54">
-    <link rel="stylesheet" href="../analysis/assets/css/components.css?v=54">
-    <link rel="stylesheet" href="../analysis/assets/css/table.css?v=54">
-    <link rel="stylesheet" href="assets/css/stemgen.css?v=54">
+    <link rel="stylesheet" href="../analysis/assets/css/base.css?v=55">
+    <link rel="stylesheet" href="../analysis/assets/css/components.css?v=55">
+    <link rel="stylesheet" href="../analysis/assets/css/table.css?v=55">
+    <link rel="stylesheet" href="assets/css/stemgen.css?v=55">
 </head>
 <body>
     <div class="app">
@@ -76,22 +76,22 @@ PageGuard::enforce(RunState::STEMGEN);
     <!-- Общее UI-ядро (бейдж статуса + блокировка ссылок в шапке):
          то же, что на странице «Обработка», - чтобы меню и статус
          вели себя одинаково на обоих модулях. -->
-    <script src="../analysis/assets/js/core/ui.js?v=54"></script>
-    <script src="assets/js/core/constants.js?v=54"></script>
-    <script src="assets/js/core/dom.js?v=54"></script>
-    <script src="assets/js/core/store.js?v=54"></script>
-    <script src="assets/js/core/utils.js?v=54"></script>
-    <script src="assets/js/services/api.js?v=54"></script>
-    <script src="assets/js/services/notifier.js?v=54"></script>
-    <script src="assets/js/engine/stem.js?v=54"></script>
-    <script src="assets/js/engine/track.js?v=54"></script>
-    <script src="assets/js/engine/player.js?v=54"></script>
-    <script src="assets/js/engine/waveform.js?v=54"></script>
-    <script src="assets/js/ui/spectrum.js?v=54"></script>
-    <script src="assets/js/ui/level-meter.js?v=54"></script>
-    <script src="assets/js/ui/channel.js?v=54"></script>
-    <script src="assets/js/ui/table.js?v=54"></script>
-    <script src="assets/js/services/generation.js?v=54"></script>
-    <script src="assets/js/app.js?v=54"></script>
+    <script src="../analysis/assets/js/core/ui.js?v=55"></script>
+    <script src="assets/js/core/constants.js?v=55"></script>
+    <script src="assets/js/core/dom.js?v=55"></script>
+    <script src="assets/js/core/store.js?v=55"></script>
+    <script src="assets/js/core/utils.js?v=55"></script>
+    <script src="assets/js/services/api.js?v=55"></script>
+    <script src="assets/js/services/notifier.js?v=55"></script>
+    <script src="assets/js/engine/stem.js?v=55"></script>
+    <script src="assets/js/engine/track.js?v=55"></script>
+    <script src="assets/js/engine/player.js?v=55"></script>
+    <script src="assets/js/engine/waveform.js?v=55"></script>
+    <script src="assets/js/ui/spectrum.js?v=55"></script>
+    <script src="assets/js/ui/level-meter.js?v=55"></script>
+    <script src="assets/js/ui/channel.js?v=55"></script>
+    <script src="assets/js/ui/table.js?v=55"></script>
+    <script src="assets/js/services/generation.js?v=55"></script>
+    <script src="assets/js/app.js?v=55"></script>
 </body>
 </html>

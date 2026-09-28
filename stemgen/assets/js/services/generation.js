@@ -6,6 +6,10 @@
         rowWorking, rowDoneRow, rowErrorRow, refreshTracks, updateNav,
     } = G;
 
+    // Сколько ждём первого 'running' после нажатия «Сгенерировать». Старт
+    // демона на Windows занимает секунды (PHP + импорт torch), но не полминуты.
+    const LAUNCH_WAIT_MS = 25000;
+
     // UI кнопки/прогресса: при генерации — «Идёт генерация»; когда все треки
     // уже разбиты — кнопку и полоску прогресса скрываем целиком. Если идёт
     // обработка треков (анализ) — генерацию не запускаем (взаимная блокировка).
@@ -39,6 +43,16 @@
 
         state.launched = true;
         state.generating = true;
+        // Демон поднимается отдельным процессом, поэтому progress.json ещё
+        // какое-то время отдаёт остаток ПРЕДЫДУЩЕГО прогона (status 'complete').
+        // Раньше такой остаток принимался за финал только что запущенного
+        // прогона: опрос останавливался на первом же опросе, страница писала
+        // «Готово» (зелёным), кнопка снова становилась активной — а демон между
+        // тем работал. Приходилось жать «Сгенерировать» ещё раз, и только
+        // тогда появлялся прогресс. Теперь до первого 'running' терминальные
+        // статусы игнорируются.
+        state.awaitingRun = true;
+        state.launchedAt = Date.now();
         els.stopBtn.hidden = false;
         resetStopBtn();
 
@@ -188,6 +202,29 @@
                 }
 
                 const status = p.status || 'idle';
+
+                // Демон ещё не проснулся — терминальный статус не наш. Молча
+                // ждём 'running' и не трогаем ни бейдж, ни журнал, ни строки:
+                // иначе мелькнёт зелёное «Готово» от старого прогона, а полоса
+                // прогресса на треке пропадёт (finishGeneration -> refreshTracks).
+                if (state.awaitingRun && status !== 'running') {
+                    if (Date.now() - state.launchedAt > LAUNCH_WAIT_MS) {
+                        state.awaitingRun = false;
+                        appendLog({
+                            time: '--:--:--',
+                            type: 'error',
+                            message: 'Демон не начал прогон за ' + Math.round(LAUNCH_WAIT_MS / 1000) + ' с — состояние сброшено, запустите заново.',
+                        });
+                        finishGeneration('idle');
+                        refreshTracks().catch(() => {});
+                    }
+                    return;
+                }
+
+                if (status === 'running') {
+                    state.awaitingRun = false;
+                }
+
                 setBadge(status);
                 renderLogs(p.last_message);
 
@@ -226,7 +263,14 @@
                     state.launched = false;
                     G.resetStopBtn();
                     els.stopBtn.hidden = true;
-                    appendLog({ time: '--:--:--', type: status === 'complete' ? 'success' : 'warning', message: status === 'complete' ? 'Готово' : 'Остановлено' });
+                    // Раньше для любого неуспешного финала писалось
+                    // «Остановлено» с типом warning (красное «внимание») —
+                    // даже когда демон упал с ошибкой. Разводим явно.
+                    appendLog({
+                        time: '--:--:--',
+                        type: status === 'complete' ? 'success' : (status === 'stopped' ? 'warning' : 'error'),
+                        message: status === 'complete' ? 'Готово' : (status === 'stopped' ? 'Остановлено' : 'Ошибка генерации — смотрите журнал'),
+                    });
                     setTimeout(() => G.hideLogLine(), 3000);
                     G.updateGenerateUI();
                     refreshTracks().catch(() => {});

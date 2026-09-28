@@ -10,9 +10,12 @@
     const DEFAULT_VOLUME = 0.8;
 
     class Stem {
-        constructor(kind, url) {
+        constructor(kind, url, rev) {
             this.kind = kind;
             this.url = url;
+            // mtime файла (сервер, StemRegistry::stemRevs). Ключ кеша
+            // волновой формы: перегенерировали стем — форма пересчитается.
+            this.rev = rev || 0;
             this.volume = DEFAULT_VOLUME;
             // enabled — производная от громкости: канал слышен ровно пока
             // громкость > 0. Галка в интерфейсе — это «канал включён».

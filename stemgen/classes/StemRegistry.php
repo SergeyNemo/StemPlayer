@@ -52,6 +52,7 @@ final class StemRegistry
                     'id'          => $id,
                     'done'        => $this->isDone($folder, $id),
                     'stems'       => $this->stems($folder, $id),
+                    'stem_revs'   => $this->stemRevs($folder, $id),
                 ];
             }
 
@@ -75,6 +76,7 @@ final class StemRegistry
                     'id'          => $id,
                     'done'        => $this->isDone($folder, $id),
                     'stems'       => $this->stems($folder, $id),
+                    'stem_revs'   => $this->stemRevs($folder, $id),
                 ];
             }
         }
@@ -113,6 +115,28 @@ final class StemRegistry
         foreach (STEMGEN_STEMS as $stem) {
             $file = $dir . '/' . $id . '_' . $stem . '.mp3';
             $out[$stem] = is_file($file) ? $this->stemUrl($folder, $id, $stem) : null;
+        }
+
+        return $out;
+    }
+
+    /**
+     * Ревизия каждого стема = mtime файла (0, если файла нет).
+     *
+     * Клиент держит кеш волновых форм в localStorage и привязывает его к mtime:
+     * трек перегенерировали — mtime сменился — форма пересчиталась сама, без
+     * ручной очистки кеша. Содержимое файла не читаем, только stat().
+     *
+     * @return array<string, int>
+     */
+    public function stemRevs(string $folder, string $id): array
+    {
+        $out = [];
+        $dir = $this->stemDir($folder, $id);
+
+        foreach (STEMGEN_STEMS as $stem) {
+            $file = $dir . '/' . $id . '_' . $stem . '.mp3';
+            $out[$stem] = is_file($file) ? (int) filemtime($file) : 0;
         }
 
         return $out;

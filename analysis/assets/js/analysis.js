@@ -1,9 +1,9 @@
-import { state, els, TERMINAL_STATES, POLL_INTERVAL } from './store.js?v=15';
-import { fetchJson, appendLog, renderLogs, setBadge, updateProcessUI, hideLogLine } from './utils.js?v=15';
-import { rowProcessing, rowQueued, rowDone, rowError, rebuildRowIdle } from './table.js?v=15';
-import { syncPlayButtons } from './player.js?v=15';
-import { hideBanner } from './views.js?v=15';
-import { refreshInbox } from './upload.js?v=15';
+import { state, els, TERMINAL_STATES, POLL_INTERVAL } from './store.js?v=16';
+import { fetchJson, appendLog, renderLogs, setBadge, updateProcessUI, hideLogLine } from './utils.js?v=16';
+import { rowProcessing, rowQueued, rowDone, rowError, rebuildRowIdle } from './table.js?v=16';
+import { syncPlayButtons } from './player.js?v=16';
+import { hideBanner } from './views.js?v=16';
+import { refreshInbox } from './upload.js?v=16';
 
 // Демон шлёт сердцебиение (last_ping) раз в 10 с, поэтому 120 с молчания —
 // это уже точно не работающий процесс.
@@ -12,6 +12,11 @@ function isStaleRun(progress) {
 
     return ping > 0 && Date.now() / 1000 - ping > 120;
 }
+
+// Сколько ждём первого 'running' после нажатия «Обработать». Старт демона на
+// Windows занимает до нескольких секунд (PHP + импорт torch), но не полминуты:
+// если за это время 'running' не появился — запуска не было.
+const LAUNCH_WAIT_MS = 25000;
 
 function recoverDeadRun() {
     stopPolling();
@@ -170,6 +175,15 @@ function markRow(name, patch) {
 function startPolling(launchAnalysis) {
     stopPolling();
     state.mode = 'poll';
+    // Демон поднимается отдельным процессом, поэтому progress.json ещё
+    // какое-то время отдаёт остаток ПРЕДЫДУЩЕГО прогона (status 'complete').
+    // Раньше такой остаток принимался за финал только что запущенного прогона:
+    // опрос останавливался, страница писала «Готово», кнопка «Обработать»
+    // снова становилась активной — а демон между тем работал, и в списке
+    // треков он снова был «в очереди». Приходилось жать кнопку ещё раз.
+    // Теперь до первого 'running' терминальные статусы просто игнорируются.
+    state.awaitingRun = true;
+    state.launchedAt = Date.now();
     els.stopBtn.hidden = false;
     updateProcessUI();
     syncPlayButtons();
@@ -211,6 +225,28 @@ function pollProgress() {
             }
 
             const status = progress.status || 'idle';
+
+            // Демон ещё не проснулся — терминальный статус не наш. Молча ждём
+            // 'running' и не трогаем ни бейдж, ни журнал: иначе на экране
+            // мелькнёт зелёное «Готово» от старого прогона.
+            if (state.awaitingRun && status !== 'running') {
+                if (Date.now() - state.launchedAt > LAUNCH_WAIT_MS) {
+                    state.awaitingRun = false;
+                    appendLog({
+                        time: '--:--:--',
+                        type: 'error',
+                        message: 'Демон не начал прогон за ' + Math.round(LAUNCH_WAIT_MS / 1000) + ' с — состояние сброшено, запустите заново.',
+                    });
+                    finishProcessing('idle');
+                    refreshInbox();
+                }
+                return;
+            }
+
+            if (status === 'running') {
+                state.awaitingRun = false;
+            }
+
             setBadge(status);
             renderLogs(progress.last_message);
             updateProcessUI();
@@ -280,10 +316,13 @@ function pollProgress() {
                 resetStopBtn();
                 updateProcessUI();
                 const stopped = status === 'stopped';
+                const failed = status === 'error';
+                // Раньше для 'error' писалось зелёное «Готово»: прогон упал,
+                // а страница рапортовала об успехе. Разводим все три финала.
                 appendLog({
                     time: '--:--:--',
-                    type: stopped ? 'warning' : 'success',
-                    message: stopped ? 'Остановлено' : 'Готово',
+                    type: stopped ? 'warning' : (failed ? 'error' : 'success'),
+                    message: stopped ? 'Остановлено' : (failed ? 'Ошибка обработки — смотрите журнал' : 'Готово'),
                 });
                 setTimeout(hideLogLine, 3000);
                 refreshInbox();

@@ -167,6 +167,9 @@
     opacity: 0; transform: translateY(-4px);
     transition: opacity .25s ease, transform .25s ease;
     overflow: hidden;
+    /* Без этого nowrap-сообщение из .message растягивало контейнер шире экрана:
+       по цепочке flex-элементов min-content пробивало 740px на телефоне. */
+    min-width: 0;
 }
 .log-line.is-show { opacity: 1; transform: translateY(0); }
 .log-line .badge {
@@ -175,7 +178,7 @@
     background: rgba(255, 255, 255, .06);
 }
 .log-line .message {
-    min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .log-line.log-success { color: var(--success); }
 .log-line.log-success .badge { color: var(--success); background: rgba(63, 185, 80, .15); }

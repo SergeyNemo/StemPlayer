@@ -1,5 +1,5 @@
-import { state } from './store.js?v=15';
-import { appendLog } from './utils.js?v=15';
+import { state } from './store.js?v=16';
+import { appendLog } from './utils.js?v=16';
 
 // ---------- Плеер ----------
 
