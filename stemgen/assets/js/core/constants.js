@@ -7,7 +7,6 @@ window.StemGen = window.StemGen || {};
     G.API = 'stemgenApi.php';
     G.STEM_ORDER = ['other', 'vocals', 'bass', 'drums'];
     G.STEM_NAMES = { other: 'Музыка', vocals: 'Вокал', bass: 'Басс', drums: 'Ударные' };
-    G.TYPE_LABELS = { info: 'ИНФО', success: 'OK', error: 'ОШИБКА', warning: 'ПРЕД' };
     G.TERMINAL = ['complete', 'error', 'stopped'];
 
     // Этапы разбиения трека — тот же список, что шлёт stem_splitter.py

@@ -1,5 +1,5 @@
-import { state } from './store.js?v=16';
-import { renderTable } from './table.js?v=16';
+import { state } from './store.js?v=48';
+import { renderTable } from './table.js?v=48';
 
 // ---------- Сортировка по заголовкам колонок ----------
 

@@ -11,18 +11,23 @@ declare(strict_types=1);
  * файлов прогресса и опросов нет: этапы приезжают в тот момент,
  * когда реально случились.
  *
- * Две особенности Windows/PHP 8.2, из-за которых реализация неочевидна
- * (обе проверены на analyzer.py, ~12 c работы):
+ * Чтение stdout идёт через временный ФАЙЛ, а не конвейер. Особенности
+ * Windows/PHP 8.2, из-за которых реализация неочевидна (проверено на
+ * месте, а не из догадок):
  *
- *  1. stream_set_blocking(false) на конвейерах proc_open НЕ работает —
- *     возвращает false, и fread() пустого канала блокируется до прихода
- *     данных. Поэтому stdout читается только после stream_select().
- *  2. В одном stream_select() нельзя держать stderr вместе со stdout:
- *     select ждёт готовности ВСЕХ переданных потоков, а stderr у скрипта
- *     обычно молчит до самого конца — цикл вставал на нём и все этапы
- *     приезжали разом на финале (load@+0.2c, дальше bpm/key/meta@+12c).
- *     Поэтому stderr уводится во временный файл: нет конвейера — нет
- *     блокировки, нет и переполнения буфера в 64 KB на долгом выводе.
+ *  1. stream_set_blocking(false) на конвейерах proc_open НЕ работает
+ *     (возвращает false) — fread() пустого канала блокирует до прихода
+ *     данных, сколько бы ни подождал.
+ *  2. stream_select() на конвейере врёт: возвращает «готов» мгновенно
+ *     (ready=1, dt≈0ms) даже когда данных нет вообще. Значит им нельзя
+ *     отгораживаться от блокирующего fread().
+ *
+ * Из-за этого старый цикл с конвейером замирал на «молчаливых» минутах
+ * (демucs не пишет в stdout): fread() висел до следующей строки, и
+ * keepAlive()/остановка не вызывались — last_ping в progress-файле
+ * замирал, и страница после 120 секунд объявляла живой процесс
+ * зависшим. Файл читается без блокировки в любом состоянии, поэтому
+ * цикл каждые ~100 мс дочитывает вывод и качает сердцебиение.
  */
 final class PythonRunner
 {
@@ -45,11 +50,15 @@ final class PythonRunner
         $interpreter = $python !== '' ? $python : STEMPLAYER_PYTHON;
         $command = [$interpreter, $script, ...$cliArgs];
 
+        // Вывод — во временные файлы. stderr уходил в файл и раньше (см.
+        // старые комментарии выше), stdout переносим тоже: единственный
+        // способ не блокироваться на пустом канале.
         $stderrFile = tempnam(sys_get_temp_dir(), 'stempy_');
+        $stdoutFile = tempnam(sys_get_temp_dir(), 'stempy_out_');
 
         $descriptors = [
             0 => ['pipe', 'r'],
-            1 => ['pipe', 'w'],
+            1 => $stdoutFile !== false ? ['file', $stdoutFile, 'w'] : ['pipe', 'w'],
             2 => $stderrFile !== false ? ['file', $stderrFile, 'w'] : ['pipe', 'w'],
         ];
 
@@ -58,7 +67,8 @@ final class PythonRunner
         $process = proc_open($command, $descriptors, $pipes, dirname(__DIR__));
 
         if (!is_resource($process)) {
-            $this->removeStderrFile($stderrFile);
+            $this->removeTempFile($stderrFile);
+            $this->removeTempFile($stdoutFile);
 
             return [
                 'stdout'     => '',
@@ -70,95 +80,101 @@ final class PythonRunner
 
         fclose($pipes[0]);
 
-        $stdout   = '';
-        $stageBuf = '';
-        $stopped  = false;
+        $stream = ($stdoutFile !== false) ? @fopen($stdoutFile, 'r') : false;
 
-        // Сколько ждём конца stdout, если процесс умер, а EOF не наступил
-        // (конвейер могут держать внуки — ffmpeg и т.п.).
-        $eofGraceDeadline = 0.0;
+        $offset    = 0;
+        $stdout    = '';
+        $stageBuf  = '';
+        $stopped   = false;
+        $pid       = 0;
+        $lastGrow  = microtime(true);
+        $deadSince = 0.0;
+        $aliveCheckedAt = 0.0;
 
-        $write  = null;
-        $except = null;
+        // Страховка от патологического случая, когда процесс числится «мёртвым»
+        // (running=false), PID не подтверждается, но файл не растёт бесконечно.
+        $graceDeadline = 600.0;
 
         try {
             while (true) {
-                $read  = [$pipes[1]];
-                $ready = @stream_select($read, $write, $except, 0, 200_000);
-
-                if ($ready !== false && $ready > 0) {
-                    $chunk = (string) @fread($pipes[1], 65536);
-
-                    if ($chunk !== '') {
-                        $stdout   .= $chunk;
-                        $stageBuf .= $chunk;
-
-                        while (($nl = strpos($stageBuf, "\n")) !== false) {
-                            $line     = substr($stageBuf, 0, $nl);
-                            $stageBuf = substr($stageBuf, $nl + 1);
-                            $this->handleLine(trim($line), $onStage);
-                        }
-                    }
-                }
-
-                $status  = proc_get_status($process);
-                $running = (bool) ($status['running'] ?? false);
-
-                if ($running && $stopCheck !== null && $stopCheck()) {
+                // Сердцебиение и стоп — на КАЖДОЙ итерации, а не только при
+                // $running: на этой сборке Windows/PHP proc_get_status()['running']
+                // отдаёт false на живом, но молчащем процессе. Короткое
+                // замыкание в `if ($running && $stopCheck())` оставляло keepAlive
+                // невызванным (last_ping замирал, страница писала «завис») и
+                // стоп мёртвым. keepAlive сам дешёвый (запись не чаще раза в
+                // 10 с), поэтому вызов вне условия бесплатен.
+                if ($stopCheck !== null && $stopCheck()) {
                     $this->terminate($process);
                     $stopped = true;
                     break;
                 }
 
-                // Выход только когда процесс мёртв И stdout дочитан: одного
-                // флага running мало, proc_get_status() на этой сборке может
-                // вернуть running=false на живом процессе, и тогда данные
-                // приехали бы уже на финальном сливе.
-                if (!$running && feof($pipes[1])) {
-                    break;
+                $status = proc_get_status($process);
+
+                if ($pid === 0) {
+                    $pid = (int) ($status['pid'] ?? 0);
                 }
 
-                if (!$running) {
-                    if ($eofGraceDeadline === 0.0) {
-                        $eofGraceDeadline = microtime(true) + 30.0;
-                    } elseif (microtime(true) > $eofGraceDeadline) {
-                        break;
+                // Дочитываем stdout: сколько появилось нового — столько и берём.
+                if ($stream !== false) {
+                    clearstatcache(true, $stdoutFile);
+                    $size = @filesize($stdoutFile);
+
+                    if ($size !== false && $size > $offset) {
+                        $chunk = (string) @fread($stream, $size - $offset);
+
+                        if ($chunk !== '') {
+                            $offset   += strlen($chunk);
+                            $lastGrow  = microtime(true);
+                            $stdout   .= $chunk;
+                            $stageBuf .= $chunk;
+                            $this->consumeLines($stageBuf, $onStage);
+                        }
                     }
-
-                    usleep(50_000);
                 }
+
+                $running = (bool) ($status['running'] ?? false);
+
+                if ($running) {
+                    $deadSince = 0.0;
+                    $aliveCheckedAt = 0.0;
+                } elseif ($deadSince === 0.0) {
+                    $deadSince = microtime(true);
+                } elseif (microtime(true) - $deadSince > $graceDeadline) {
+                    break;
+                } elseif (microtime(true) - $lastGrow >= 0.7) {
+                    // Файл не растёт — присматриваемся. Правду о «мёртвости»
+                    // уточняем не чаще раза в секунду: tasklist стоит дорого.
+                    if (microtime(true) - $aliveCheckedAt >= 1.0) {
+                        $aliveCheckedAt = microtime(true);
+
+                        if (!$this->processAlive($pid)) {
+                            break;
+                        }
+                    }
+                }
+
+                usleep(100_000);
             }
         } finally {
-            // Добираем остаток из конвейера, пока он отдаёт данные.
-            for ($i = 0; $i < 256; $i++) {
-                $read  = [$pipes[1]];
-                $ready = @stream_select($read, $write, $except, 0, 50_000);
+            // Добираем остаток stdout (прогресс-строки, финальная status).
+            if ($stream !== false) {
+                clearstatcache(true, $stdoutFile);
+                $size = @filesize($stdoutFile);
 
-                if ($ready === false || $ready === 0) {
-                    break;
+                if ($size !== false && $size > $offset) {
+                    $chunk = (string) @fread($stream, $size - $offset);
+
+                    if ($chunk !== '') {
+                        $stdout   .= $chunk;
+                        $stageBuf .= $chunk;
+                        $this->consumeLines($stageBuf, $onStage);
+                    }
                 }
 
-                $chunk = (string) @fread($pipes[1], 65536);
-
-                if ($chunk === '') {
-                    break;
-                }
-
-                $stdout   .= $chunk;
-                $stageBuf .= $chunk;
-
-                while (($nl = strpos($stageBuf, "\n")) !== false) {
-                    $line     = substr($stageBuf, 0, $nl);
-                    $stageBuf = substr($stageBuf, $nl + 1);
-                    $this->handleLine(trim($line), $onStage);
-                }
-
-                if (feof($pipes[1])) {
-                    break;
-                }
+                fclose($stream);
             }
-
-            fclose($pipes[1]);
 
             if (isset($pipes[2]) && is_resource($pipes[2])) {
                 fclose($pipes[2]);
@@ -166,8 +182,9 @@ final class PythonRunner
         }
 
         $exitCode = proc_close($process);
-        $stderr   = $this->readStderrFile($stderrFile);
-        $this->removeStderrFile($stderrFile);
+        $stderr   = $this->readTempFile($stderrFile);
+        $this->removeTempFile($stderrFile);
+        $this->removeTempFile($stdoutFile);
 
         return [
             'stdout'     => $stdout,
@@ -205,7 +222,54 @@ final class PythonRunner
         }
     }
 
-    private function readStderrFile($file): string
+    /**
+     * Разбор накопленного буфера построчно, пока в нём есть переводы строк.
+     *
+     * Остаток без "\n" остаётся в $stageBuf и ждёт следующего чанка —
+     * строка могла прибыть не целой (чтение из файла не гарантирует границ).
+     */
+    private function consumeLines(string &$stageBuf, ?callable $onStage): void
+    {
+        while (($nl = strpos($stageBuf, "\n")) !== false) {
+            $line     = substr($stageBuf, 0, $nl);
+            $stageBuf = substr($stageBuf, $nl + 1);
+            $this->handleLine(trim($line), $onStage);
+        }
+    }
+
+    /**
+     * Жив ли процесс на самом деле.
+     *
+     * На Windows proc_get_status()['running'] лжёт на живом молчащем
+     * процессе (проверено), поэтому «мёртвость» подтверждаем через tasklist.
+     * На *nix running достоверен: false — процесс умер.
+     */
+    private function processAlive(int $pid): bool
+    {
+        if (DIRECTORY_SEPARATOR !== '\\') {
+            // *nix: proc_get_status()['running'] не врёт — вызывающий уже
+            // видел running=false, значит процесс закончился.
+            return false;
+        }
+
+        if ($pid <= 0) {
+            // PID не достали — консервативно считаем живым, чтобы не
+            // оборвать работающую стадию из-за ложного running=false.
+            return true;
+        }
+
+        @exec('tasklist /FI "PID eq ' . $pid . '" /NH 2>NUL', $lines, $rc);
+
+        foreach ((array) $lines as $line) {
+            if (preg_match('/\b' . preg_quote((string) $pid, '/') . '\b/', $line)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function readTempFile($file): string
     {
         if ($file === false || !is_file($file)) {
             return '';
@@ -214,7 +278,7 @@ final class PythonRunner
         return trim((string) @file_get_contents($file));
     }
 
-    private function removeStderrFile($file): void
+    private function removeTempFile($file): void
     {
         if ($file !== false && is_file($file)) {
             @unlink($file);

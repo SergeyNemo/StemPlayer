@@ -1,7 +1,6 @@
 'use strict';
 (function (G) {
     const { els } = G;
-    const TYPE_LABELS = G.TYPE_LABELS;
 
     // Бейдж статуса - общий код (StemUI.createBadge), тот же, что на
     // странице «Обработка»: complete/error держим 3 секунды и тихо гасим
@@ -17,55 +16,27 @@
         els.progressBar.classList.toggle('is-active', !!running);
     };
 
-    let logSwapTimer = null;
-    let lastShownMessageKey = null;
-
-    // Это «журнал» теперь — одна строка под прогрессбаром. Видна постоянно,
-    // пока не придёт новая запись: старая плавно гаснет, новая плавно появляется.
-    function buildLogLine(type, message) {
-        els.logLine.className = `log-line log-${type}`;
-        els.logLine.innerHTML = '';
-
-        const badge = document.createElement('span');
-        badge.className = 'badge';
-        badge.textContent = TYPE_LABELS[type] || String(type).toUpperCase();
-
-        const text = document.createElement('span');
-        text.className = 'message';
-        text.textContent = message;
-
-        els.logLine.append(badge, text);
-        els.logLine.hidden = false;
-
-        requestAnimationFrame(() => requestAnimationFrame(() => els.logLine.classList.add('is-show')));
-    }
+    // Это «журнал» — одна строка под прогрессбаром. Поведение живёт в общем
+    // ядре (StemUI.createLogLine), ровно как на странице «Обработка»: новая
+    // запись сменяет старую, а без новых строка сама исчезает через
+    // LOG_LIFE_MS. Раньше строка жила до следующего события — из-за этого на
+    // экране навсегда оставались «Загружено файлов: 1» и прочие сообщения
+    // о давних событиях. Подписи типа («OK», «ИНФО») в строке нет: тип виден
+    // по цвету, а сверху есть бейдж статуса.
+    const logLine = window.StemUI.createLogLine(els.logLine);
 
     G.appendLog = function appendLog(msg) {
-        if (!els.logLine) return;
-        if (logSwapTimer) {
-            clearTimeout(logSwapTimer);
-            logSwapTimer = null;
-        }
-
-        const type = (msg.type || 'info').toLowerCase();
-
-        if (!els.logLine.hidden && els.logLine.classList.contains('is-show')) {
-            els.logLine.classList.remove('is-show');
-            logSwapTimer = setTimeout(() => buildLogLine(type, msg.message || ''), 200);
-        } else {
-            buildLogLine(type, msg.message || '');
-        }
+        logLine.append(String((msg && msg.type) || 'info').toLowerCase(), (msg && msg.message) || '');
     };
 
     G.hideLogLine = function hideLogLine() {
-        els.logLine.classList.remove('is-show');
-        setTimeout(() => {
-            if (!els.logLine.classList.contains('is-show')) els.logLine.hidden = true;
-        }, 300);
+        logLine.hide();
     };
 
     // Живая строка журнала: демон пишет в progress.json единственное поле
     // last_message, polling подхватывает его и показывает, пока не придёт новое.
+    let lastShownMessageKey = null;
+
     G.renderLogs = function renderLogs(entry) {
         if (!entry || !entry.message) return;
         const key = `${entry.time}|${entry.type}|${entry.message}`;

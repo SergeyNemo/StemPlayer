@@ -1,16 +1,18 @@
-import { els, state } from './store.js?v=16';
-import { fetchJson, setBadge, renderLogs, appendLog } from './utils.js?v=16';
-import { initPlayer } from './player.js?v=16';
-import { switchToUpload, switchToTracks } from './views.js?v=16';
-import { sortBy } from './sort.js?v=16';
-import { bindUpload } from './upload.js?v=16';
-import { startProcessing, requestStop, startPolling } from './analysis.js?v=16';
+import { els, state } from './store.js?v=48';
+import { fetchJson, setBadge, renderLogs, appendLog } from './utils.js?v=48';
+import { initPlayer } from './player.js?v=48';
+import { switchToUpload, switchToTracks } from './views.js?v=48';
+import { sortBy } from './sort.js?v=48';
+import { bindUpload } from './upload.js?v=48';
+import { initDelete } from './delete.js?v=48';
+import { startProcessing, requestStop, startPolling } from './analysis.js?v=48';
 
 // ---------- Инициализация ----------
 
 function init() {
     bindUpload();
     initPlayer();
+    initDelete();
 
     els.processBtn.addEventListener('click', startProcessing);
     els.stopBtn.addEventListener('click', requestStop);

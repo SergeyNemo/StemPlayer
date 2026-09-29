@@ -1,4 +1,23 @@
-.header { display: flex; align-items: center; justify-content: space-between; }
+.header { display: flex; align-items: center; justify-content: space-between; position: relative; }
+
+/* На «Стемах» меню — прямой ребёнок шапки: центрируем его ровно по
+   центру шапки (как на «Обработке»), чтобы меню стояло в одном месте. */
+.header > .nav {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+}
+
+/* Меню центрируется по шапке ГРУБО (ровно 50% ширины), а кнопка
+   «+ Добавить треки» просто приклеена слева от него и не влияет на раскладку:
+   меню не сдвигается ни при каких ширинах, где бы ни были заголовок и бейдж. */
+.header-tools {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    display: flex; align-items: center; gap: 10px;
+}
+.btn-add {
+    padding: 8px 16px; font-size: 13px;
+    white-space: nowrap;
+    position: absolute; right: calc(100% + 10px); top: 50%; transform: translateY(-50%);
+}
 
 /* ---------- Навигация по модулям ---------- */
 .nav {
@@ -34,9 +53,27 @@
     vertical-align: middle;
 }
 
-@media (max-width: 700px) {
+@media (max-width: 1300px) {
     .header { flex-wrap: wrap; gap: 10px; }
-    .nav { order: 3; width: 100%; justify-content: center; }
+    /* Навигация — прямая ссылка (страница «Стемы»): на всякий случай держим
+       и старый селектор, и новый обёрточный — зависит от разметки страницы.
+       Брейкпоинт поднят до 1300px: при 1101–1300px приклеенная слева кнопка
+       «+ Добавить» начинала перекрывать заголовок (меню по центру, кнопка
+       уезжала в зону бренда). На этих ширинах шапка переносится на две
+       строки, и кнопка с меню встают в центре второй строки вместе. */
+    .header > .nav { position: static; order: 3; width: 100%; justify-content: center; transform: none; }
+    .header-tools {
+        position: static; transform: none; order: 3; width: 100%;
+        flex-wrap: wrap; justify-content: center;
+    }
+    .header-tools .btn-add { position: static; transform: none; }
+}
+
+/* Телефон: шапка в три строки — заголовок, по центру бейдж статуса, ниже
+   меню. Бейдж стоит на своей строке ровно посередине, а не прижат вправо. */
+@media (max-width: 700px) {
+    .header > .brand { flex: 1 0 100%; }
+    .status-badge { order: 2; margin: 0 auto; }
 }
 
 .brand { display: flex; align-items: center; gap: 12px; }
@@ -52,7 +89,11 @@
     padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 600;
     border: 1px solid var(--panel-border); text-transform: uppercase; letter-spacing: 1px;
     background: var(--panel); color: var(--muted);
-    display: inline-flex; align-items: center; gap: 8px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    /* Ширина зафиксирована по самой длинной надписи («COMPLETE»): при смене
+       IDLE → RUNNING → COMPLETE бейдж не расширяется, и меню слева от него
+       не сдвигается ни на пиксель. */
+    min-width: 128px; text-align: center;
 }
 .status-badge::before {
     content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted);
@@ -91,6 +132,78 @@
 .btn-link {
     background: none; border: none; cursor: pointer;
     color: var(--info); font-size: 13px; padding: 2px 6px;
+}
+/* Подтверждение необратимого действия — единственная красная кнопка в проекте. */
+.btn-danger { background: var(--error); color: #fff; }
+.btn-danger:hover:not(:disabled) { background: #ff6a63; transform: translateY(-1px); }
+
+/* ---------- Модалка подтверждения удаления ---------- */
+.modal-overlay {
+    position: fixed; inset: 0; z-index: 60;
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+    background: rgba(6, 5, 4, .74);
+    backdrop-filter: blur(3px);
+    opacity: 0; transition: opacity .18s ease;
+}
+.modal-overlay.is-open { opacity: 1; }
+
+.modal {
+    width: min(470px, 100%);
+    padding: 22px 22px 18px;
+    border-radius: 14px;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, .6);
+    transform: translateY(10px) scale(.98);
+    transition: transform .18s ease;
+}
+.modal-overlay.is-open .modal { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+    .modal-overlay, .modal { transition: none; }
+    .modal { transform: none; }
+}
+
+.modal-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.modal-icon {
+    flex: 0 0 auto;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 38px; height: 38px; border-radius: 10px;
+    color: var(--error);
+    background: rgba(248, 81, 73, .12);
+    border: 1px solid rgba(248, 81, 73, .35);
+}
+.modal-icon .del-glyph { width: 19px; height: 19px; }
+.modal-title { font-size: 16.5px; font-weight: 700; }
+
+.modal-text { font-size: 13.5px; line-height: 1.55; color: var(--text); }
+/* Имя файла — моноширинным и в акцентном цвете: его нужно узнать сразу. */
+.modal-text strong {
+    font-family: var(--mono); font-size: 13px; font-weight: 700;
+    color: var(--info); overflow-wrap: anywhere;
+}
+
+.modal-list {
+    margin-top: 12px; padding-left: 18px;
+    display: flex; flex-direction: column; gap: 5px;
+    font-size: 13px; color: var(--muted);
+}
+.modal-list code {
+    font-family: var(--mono); font-size: 12.5px; color: var(--text);
+}
+
+.modal-note { margin-top: 12px; font-size: 12.5px; font-weight: 600; color: var(--error); }
+
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.modal-actions .btn { padding: 10px 22px; font-size: 14px; }
+
+@media (max-width: 520px) {
+    /* На телефоне кнопки — во всю ширину, порядком «Отмена» сверху: тянуться
+       к нижней не нужно, подтверждение необратимое, но лишнего движения быть
+       не должно. */
+    .modal { padding: 18px 16px 16px; }
+    .modal-actions { flex-direction: column-reverse; }
+    .modal-actions .btn { width: 100%; }
 }
 
 /* ---------- Прогресс ---------- */
@@ -159,7 +272,7 @@
 /* ---------- Однострочный журнал под прогрессбаром ---------- */
 .toolbar-right {
     display: flex; flex-direction: column; align-items: stretch; gap: 8px;
-    flex: 1 1 auto; min-width: 300px; max-width: 420px;
+    flex: 1 1 auto; min-width: 300px; max-width: 420px; order: 1;
 }
 .log-line {
     display: flex; align-items: center; gap: 10px;
@@ -172,17 +285,11 @@
     min-width: 0;
 }
 .log-line.is-show { opacity: 1; transform: translateY(0); }
-.log-line .badge {
-    flex: 0 0 auto; min-width: 62px; text-align: center; border-radius: 999px; padding: 2px 8px;
-    font-weight: 700; font-size: 10px; letter-spacing: .8px; color: var(--muted);
-    background: rgba(255, 255, 255, .06);
-}
 .log-line .message {
     flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* Тип строки виден по цвету. Отдельной подписи («SUCCESS», «ОШИБКА») нет:
+   сверху в шапке уже есть индикатор статуса, а слово только занимало место. */
 .log-line.log-success { color: var(--success); }
-.log-line.log-success .badge { color: var(--success); background: rgba(63, 185, 80, .15); }
 .log-line.log-error { color: var(--error); }
-.log-line.log-error .badge { color: var(--error); background: rgba(248, 81, 73, .15); }
 .log-line.log-warning { color: var(--warning); }
-.log-line.log-warning .badge { color: var(--warning); background: rgba(210, 153, 34, .15); }

@@ -13,6 +13,12 @@ final class Http
     public static function jsonResponse(array $payload): never
     {
         header('Content-Type: application/json; charset=utf-8');
+        // API-опросы ходят на один и тот же URL (get_progress раз в 2 с).
+        // Без явного запрета браузер может отдать закешированный ответ со
+        // старым last_ping — страница решает, что процесс завис, хотя тот
+        // жив. Запрещаем кэширование навсегда.
+        header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+        header('Pragma: no-cache');
         echo self::encode($payload);
         exit;
     }

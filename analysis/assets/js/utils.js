@@ -1,7 +1,7 @@
-import { els, state, api } from './store.js?v=16';
+import { els, state, api } from './store.js?v=48';
 
 function fetchJson(action, options) {
-    return fetch(`${api.base}?action=${encodeURIComponent(action)}`, options)
+    return fetch(`${api.base}?action=${encodeURIComponent(action)}`, { cache: 'no-store', ...(options || {}) })
         .then(async (res) => {
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             return res.json();
@@ -30,54 +30,20 @@ if (!StemUI) {
 // опрос раз в 2 с не должен постоянно перезапускать таймер.
 const setBadge = StemUI.createBadge(els.badge, { holdMs: StemUI.BADGE_HOLD_MS });
 
-let logSwapTimer = null;
-
-// Это «журнал» теперь — одна строка под прогрессбаром. Видна постоянно,
-// пока не придёт новая запись: старая плавно гаснет, новая плавно появляется.
-function buildLogLine(type, message) {
-    const cls = ['info', 'success', 'error', 'warning'].includes(type) ? type : 'info';
-    els.logLine.className = `log-line log-${cls}`;
-    els.logLine.innerHTML = '';
-
-    const badge = document.createElement('span');
-    badge.className = 'badge';
-    badge.textContent = (type || 'info').toUpperCase();
-
-    const text = document.createElement('span');
-    text.className = 'message';
-    text.textContent = message;
-
-    els.logLine.append(badge, text);
-    els.logLine.hidden = false;
-
-    requestAnimationFrame(() => requestAnimationFrame(() => els.logLine.classList.add('is-show')));
-}
-
-function showLogLine(type, message) {
-    if (!els.logLine) return;
-    if (logSwapTimer) {
-        clearTimeout(logSwapTimer);
-        logSwapTimer = null;
-    }
-
-    if (!els.logLine.hidden && els.logLine.classList.contains('is-show')) {
-        els.logLine.classList.remove('is-show');
-        logSwapTimer = setTimeout(() => buildLogLine(type, message), 200);
-    } else {
-        buildLogLine(type, message);
-    }
-}
+// Это «журнал» — одна строка под прогрессбаром. Поведение живёт в общем ядре
+// (StemUI.createLogLine), чтобы «Обработка» и «Стемы» гасили строки одинаково:
+// новая запись сменяет старую, а без новых строка исчезает сама (LOG_LIFE_MS).
+// Подписи типа («SUCCESS», «INFO») в строке нет: тип виден по цвету самой
+// строки, а сверху в шапке есть индикатор статуса.
+const logLine = StemUI.createLogLine(els.logLine);
 
 function appendLog(entry) {
     const { type, message } = entry || {};
-    showLogLine(type, message || '');
+    logLine.append(type, message || '');
 }
 
 function hideLogLine() {
-    els.logLine.classList.remove('is-show');
-    setTimeout(() => {
-        if (!els.logLine.classList.contains('is-show')) els.logLine.hidden = true;
-    }, 300);
+    logLine.hide();
 }
 
 let lastShownMessageKey = null;
@@ -180,4 +146,38 @@ const updateNav = StemUI.createNav({
     ],
 });
 
-export { fetchJson, fmtDuration, setBadge, appendLog, renderLogs, showProgress, updateProcessUI, buildNameNode, hideLogLine, updateNav };
+// Иконка корзинки для удаления трека — тот же приём, что у play-глифа в
+// player.js: inline-SVG со stroke: currentColor, поэтому кнопка красится сама
+// (символ юникода рисуется системным шрифтом и в общей цветовой гамме смотрится
+// чужеродно). Живёт здесь, а не в delete.js, чтобы таблица не тянула модуль
+// удаления: иначе получился бы цикл table.js -> delete.js -> views.js -> table.js.
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function trashIcon() {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('class', 'del-glyph');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '1.7');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+
+    // Ручка, бортик с крышкой и полоски ведра — тонким контуром, как в иконках
+    // Material: узнаётся сразу и не зависит от начертания шрифта.
+    for (const d of [
+        'M9.5 3.5h5',
+        'M5.5 6.5h13M6.2 6.5l.9 12.1a2 2 0 0 0 2 1.9h5.8a2 2 0 0 0 2-1.9l.9-12.1',
+        'M10.3 10.3v6.4M13.7 10.3v6.4',
+    ]) {
+        const path = document.createElementNS(SVG_NS, 'path');
+        path.setAttribute('d', d);
+        svg.appendChild(path);
+    }
+
+    return svg;
+}
+
+export { fetchJson, fmtDuration, trashIcon, setBadge, appendLog, renderLogs, showProgress, updateProcessUI, buildNameNode, hideLogLine, updateNav };

@@ -48,12 +48,9 @@
             td.textContent = 'В music/sorted/ пока нет треков — сначала обработайте их в модуле «Обработка».';
             tr.appendChild(td);
             els.tbody.appendChild(tr);
-            els.trackTotal.textContent = 'Треков нет';
             showProgress(false);
             return;
         }
-
-        els.trackTotal.textContent = `Треков: ${state.rows.length}`;
 
         state.rows.forEach((row) => {
             // Объект трека: переиспользуем по id, буферы стемов кешируются.
@@ -149,7 +146,11 @@
             let chip, wrap, fill, stageLab;
 
             if (row.done) {
-                // Готовые стемы: каналы на всю ширину карточки.
+                // Готовые стемы: каналы на всю ширину карточки. Постоянной
+                // отметки здесь нет намеренно: после прогона перерисовываются
+                // все строки, и у готового трека не остаётся никакой подписи —
+                // «✓ Сгенерировано» живёт только на время генерации, пока
+                // видно, что трек дошёл до конца.
                 stemRow.appendChild(G.buildChannelList(track, row));
             } else {
                 // Стемов ещё нет — только статус и анимированная полоска:
@@ -284,7 +285,10 @@
             ref.tr.classList.remove('row-processing', 'row-error');
             ref.tr.classList.add('row-done');
         }
-        G.setRowState(name, 'готово', 'ok');
+        // Зелёный чип — как «✓ Обработано» на странице «Обработка». Слово
+        // «готово» здесь путало: на «генерация…» с подписью последнего этапа
+        // пользователь читал его как статус трека, а не как этап шкалы.
+        G.setRowState(name, '✓ Сгенерировано', 'ok');
     };
 
     G.rowErrorRow = function rowErrorRow(name, message) {

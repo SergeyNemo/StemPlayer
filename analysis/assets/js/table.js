@@ -1,6 +1,6 @@
-import { state, els } from './store.js?v=16';
-import { fmtDuration, buildNameNode } from './utils.js?v=16';
-import { buildPlayButton, bindSeek, applyPlaybackState } from './player.js?v=16';
+import { state, els } from './store.js?v=48';
+import { buildPlayButton, bindSeek, applyPlaybackState, fmtMinSec } from './player.js?v=48';
+import { fmtDuration, buildNameNode, trashIcon } from './utils.js?v=48';
 
 // Число ступеней шкалы = ProgressStore::STAGES на сервере. Держим в одном
 // месте, чтобы ширина считалась от одного числа; порядок подписей сервер
@@ -34,6 +34,10 @@ function renderTable(rows) {
         playBar.appendChild(playFill);
         const playTime = document.createElement('span');
         playTime.className = 'play-time';
+        // Время видно сразу, а не после нажатия play: иначе в момент клика
+        // строка расползалась (текст появлялся и расширял ячейку). Формат —
+        // тот же, что у плеера во время игры, чтобы счётчик не перескакивал.
+        if (row.duration != null) playTime.textContent = `0:00 / ${fmtMinSec(row.duration)}`;
         playWrapper.append(playBar, playTime);
 
         bindSeek(playBar, row.name);
@@ -65,22 +69,63 @@ function renderTable(rows) {
         durCell.dataset.label = 'Длительность';
         durCell.textContent = fmtDuration(row.duration);
 
+        // Корзинка: удаляет трек из Inbox вместе с копией, стемами и
+        // записями storage (см. delete.js и TrackCleaner). Обработчик не
+        // вешаем здесь — клик ловится делегированием от tbody, иначе на
+        // каждой перерисовке таблицы пришлось бы переподписывать кнопки.
+        const delCell = document.createElement('td');
+        delCell.className = 'col-act';
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'row-del';
+        delBtn.dataset.delete = row.name;
+        delBtn.title = 'Удалить трек из Inbox';
+        delBtn.setAttribute('aria-label', 'Удалить трек из Inbox: ' + row.name);
+        delBtn.appendChild(trashIcon());
+
+        delCell.appendChild(delBtn);
+
         if (row.status === 'error') tr.classList.add('row-error');
         if (row.status === 'done') tr.classList.add('row-done');
 
-        tr.append(numCell, nameCell, bpmCell, keyCell, durCell);
+        tr.append(numCell, nameCell, bpmCell, keyCell, durCell, delCell);
         els.tbody.appendChild(tr);
 
         state.rowRefs.set(row.name, {
-            tr, nameCell, bpmCell, keyCell, durCell, row,
+            tr, nameCell, bpmCell, keyCell, durCell, delBtn, row,
             playBtn, playWrapper, playFill, playTime, playBar,
             busyState: '',
         });
     });
 
-    els.trackTotalText.textContent = `Треков: ${rows.length}`;
     updateSortInd();
     applyPlaybackState();
+    syncDeleteButtons();
+}
+
+// Корзинки ведут себя как кнопки play (см. syncPlayButtons): на время
+// обработки неактивны все, а не только текущий трек — демон держит в памяти
+// весь список файлов прогона, и удаление любого из них посреди работы
+// роняет его на следующем шаге. Причина видна прямо на кнопке (title).
+// Вызывается и из renderTable(): перерисовка во время прогона не должна
+// возвращать удаление в строй.
+function syncDeleteButtons() {
+    const running = state.mode === 'processing' || state.mode === 'poll';
+
+    state.rowRefs.forEach((ref) => {
+        if (!ref.delBtn) return;
+
+        ref.delBtn.disabled = running;
+
+        if (running) {
+            ref.delBtn.title = ref.busyState === 'run'
+                ? 'Трек в работе — удалить можно после обработки'
+                : 'Идёт обработка — удалить можно после неё';
+        } else {
+            ref.delBtn.title = 'Удалить трек из Inbox';
+        }
+    });
 }
 
 function updateSortInd() {
@@ -185,6 +230,14 @@ function rowProcessing(name, stageIndex, stageLabel) {
     ref.bpmCell.textContent = '—';
     ref.keyCell.textContent = '—';
     ref.durCell.textContent = '—';
+
+    // Идущий трек удалять нельзя: демон держит его открытым, а страница всё
+    // равно гасит кнопки на всё время прогона (delete.js). Здесь — точная
+    // подсказка «почему» на самой кнопке.
+    if (ref.delBtn) {
+        ref.delBtn.disabled = true;
+        ref.delBtn.title = 'Трек в работе — удалить можно после обработки';
+    }
 
     if (typeof stageIndex === 'number') setRowStage(name, stageIndex, stageLabel);
 }
@@ -294,6 +347,13 @@ function rowError(name, message) {
 function rebuildRowIdle(ref, fast) {
     ref.busyState = '';
     clearBar(ref);
+
+    // Возвращаем корзинку в строй: после прогона трек снова можно удалить.
+    if (ref.delBtn) {
+        ref.delBtn.disabled = false;
+        ref.delBtn.title = 'Удалить трек из Inbox';
+    }
+
     const content = ref.nameCell.querySelector(':scope > .track-content') || ref.nameCell;
     const oldStack = content.querySelector(':scope > .name-stack');
     if (!fast && oldStack && !oldStack.querySelector('.chip, .cell-status, .cell-progress')) {
@@ -309,4 +369,4 @@ function rebuildRowIdle(ref, fast) {
     }, fast);
 }
 
-export { renderTable, updateSortInd, rowProcessing, setRowStage, rowQueued, rowDone, rowError, rebuildRowIdle };
+export { renderTable, updateSortInd, rowProcessing, setRowStage, rowQueued, rowDone, rowError, rebuildRowIdle, syncDeleteButtons };

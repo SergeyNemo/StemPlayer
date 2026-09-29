@@ -1,5 +1,5 @@
-import { state } from './store.js?v=16';
-import { appendLog } from './utils.js?v=16';
+import { state } from './store.js?v=48';
+import { appendLog } from './utils.js?v=48';
 
 // ---------- Плеер ----------
 
@@ -14,7 +14,11 @@ function initPlayer() {
     state.play.audio = audio;
 
     audio.addEventListener('play', () => setPlayGlyph(state.play.name, 'pause'));
-    audio.addEventListener('pause', () => setPlayGlyph(state.play.name, 'play'));
+    audio.addEventListener('pause', () => {
+        setPlayGlyph(state.play.name, 'play');
+        // Эквалайзер тулбара оживает только пока звучит музыка.
+        if (window.StereoEq) window.StereoEq.detach();
+    });
     audio.addEventListener('loadedmetadata', () => updatePlayBar());
     audio.addEventListener('ended', () => {
         setPlayGlyph(state.play.name, 'play');
@@ -25,8 +29,14 @@ function initPlayer() {
     audio.addEventListener('error', () => {
         setPlayGlyph(state.play.name, 'play');
         state.play.name = null;
+        if (window.StereoEq) window.StereoEq.detach();
     });
     audio.addEventListener('timeupdate', () => updatePlayBar());
+
+    // Стерео-эквалайзер: честное L/R через WebAudio-граф этого элемента.
+    audio.addEventListener('play', () => {
+        if (window.StereoEq) window.StereoEq.attachMedia(audio);
+    });
 }
 
 // Значок play: inline-SVG. Раньше был «треугольник из бордеров» на боксе 0x0,
@@ -104,7 +114,10 @@ function resetPlayBar(name) {
     const ref = state.rowRefs.get(name);
     if (!ref || !ref.playFill) return;
     ref.playFill.style.width = '0%';
-    ref.playTime.textContent = '';
+    // Не обнуляем время: оно должно быть видно и в покое (иначе в момент
+    // остановки строка снова «съёживалась»), а длительность известна из списка.
+    const d = ref.row && ref.row.duration;
+    ref.playTime.textContent = (d != null && Number.isFinite(Number(d))) ? `0:00 / ${fmtMinSec(d)}` : '';
 }
 
 function updatePlayBar() {
@@ -186,4 +199,4 @@ function syncPlayButtons() {
     });
 }
 
-export { initPlayer, buildPlayButton, bindSeek, applyPlaybackState, syncPlayButtons };
+export { initPlayer, buildPlayButton, bindSeek, applyPlaybackState, syncPlayButtons, fmtMinSec };

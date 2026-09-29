@@ -1,6 +1,6 @@
-import { els, state } from './store.js?v=16';
-import { setBadge, updateProcessUI } from './utils.js?v=16';
-import { renderTable } from './table.js?v=16';
+import { els, state } from './store.js?v=48';
+import { setBadge, updateProcessUI } from './utils.js?v=48';
+import { renderTable } from './table.js?v=48';
 
 // ---------- Состояния-вью ----------
 

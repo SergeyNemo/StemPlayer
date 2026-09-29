@@ -6,8 +6,29 @@
     background: var(--panel); border: 1px solid var(--panel-border);
     min-width: 0;
 }
-.toolbar-left { display: flex; align-items: center; gap: 14px; }
+.toolbar-left { display: flex; align-items: center; gap: 14px; order: 0; }
 .toolbar-meta { color: var(--muted); font-size: 13px; font-weight: 600; }
+/* Когда все треки обработаны, кнопки прячутся, а прогресс с журналом и так
+   скрыты (utils.js: updateProcessUI). Пустые группы оставляли после себя
+   строку высотой 0, и эквалайзер из-за row-gap уезжал от центра тулбара вниз.
+   Нет видимых детей — нет и строки: остаётся только eq, ровно по центру. */
+.toolbar-left:not(:has(> :not([hidden]))),
+.toolbar-right:not(:has(> :not([hidden]))) { display: none; }
+
+/* ---------- Стерео-эквалайзер в тулбаре ----------
+   Отдельная полоса во всю ширину тулбара: от центра разбегаются столбики —
+   левый канал влево, правый вправо. Активен только во время воспроизведения.
+   Пока видны кнопки или журнал — полоса стоит на своей строке под ними; когда
+   они скрыты (пустые группы схлопнуты правилом выше), остаётся одна и
+   оказывается ровно по центру тулбара. */
+.eq {
+    position: relative; flex: 1 1 100%; order: 2; min-width: 0; height: 56px;
+    border: 1px solid var(--panel-border); border-radius: 12px;
+    background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(0,0,0,.14));
+    overflow: hidden;
+}
+.eq canvas { position: absolute; inset: 0; opacity: 0; transition: opacity .25s ease; }
+.eq.is-active canvas { opacity: .8; }
 
 .banner {
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
@@ -32,10 +53,28 @@
     letter-spacing: 1px; color: var(--muted); background: var(--panel-2);
     border-bottom: 1px solid var(--panel-border);
 }
-.tracks-table th[data-sort] { cursor: pointer; user-select: none; white-space: nowrap; }
+.tracks-table th[data-sort] { cursor: pointer; user-select: none; white-space: nowrap; position: relative; }
 .tracks-table th[data-sort]:hover { color: var(--text); background: #2b241c; }
 .tracks-table th.is-sorted { color: var(--info); }
-.sort-ind { display: inline-block; min-width: 14px; margin-left: 5px; font-size: 11px; color: var(--info); }
+/* Стрелка сортировки — вне потока: раньше индикатор (пустой, но 19px из-за
+   min-width+margin) стоял после текста и сдвигал заголовок «BPM»/«Тональность»
+   левее центра ячейки. Теперь текст идеально по центру, а стрелка — у правого
+   края ячейки. */
+.sort-ind {
+    position: absolute; top: 50%; right: 10px;
+    transform: translateY(-50%);
+    min-width: 0; margin: 0;
+    font-size: 11px; color: var(--info); pointer-events: none;
+}
+/* «Обработка»: заголовок и значение каждой колонки — по центру (колонок
+   BPM/Тональность/Длительность это касалось и раньше, теперь и №),
+   кроме названия трека: оно по левому краю, чтобы имя читалось от борта. */
+.tracks-table:not(.stem-table) th,
+.tracks-table:not(.stem-table) td { text-align: center; }
+.tracks-table:not(.stem-table) th.col-track,
+.tracks-table:not(.stem-table) td.col-track { text-align: left; }
+.tracks-table:not(.stem-table) .col-track .track-content { justify-content: flex-start; }
+.tracks-table:not(.stem-table) .name-stack { flex: 1 1 auto; text-align: left; }
 .tracks-table td { padding: 12px 16px; border-bottom: 1px solid #2a241c; vertical-align: middle; transition: background-color .35s ease; }
 .tracks-table tbody tr:last-child td { border-bottom: none; }
 .tracks-table tbody tr:hover { background: #1f1a13; }
@@ -111,7 +150,7 @@ tr.row-error td { background: rgba(248,81,73,.07); }
     box-shadow: 0 0 9px rgba(255,123,0,.5);
     transition: width 0.25s linear; pointer-events: none;
 }
-.play-time { font-size: 11px; color: var(--muted); font-family: var(--mono); letter-spacing: .5px; }
+.play-time { font-size: 11px; color: var(--muted); font-family: var(--mono); letter-spacing: .5px; display: inline-block; min-width: 12ch; }
 
 /* прогресс прямо в ячейке трека — тонкая «полоска в стиле Apple» */
 .cell-progress {
@@ -177,6 +216,44 @@ tr.row-error td { background: rgba(248,81,73,.07); }
 .chip-ok { background: rgba(63,185,80,.15); color: var(--success); }
 .chip-err { background: rgba(248,81,73,.15); color: var(--error); }
 
+/* ---------- Корзинка удаления ----------
+   Колонка узкая и всегда на своём месте: подписи-заголовка нет (сортировать
+   нечего), поэтому th пустой, но по той же ширине, что и ячейка. */
+.col-act { width: 56px; }
+
+.row-del {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; padding: 0; border-radius: 9px;
+    border: 1px solid transparent; background: transparent;
+    color: var(--muted); cursor: pointer;
+    transition: color .15s ease, border-color .15s ease,
+                background-color .15s ease, transform .12s ease;
+}
+.row-del .del-glyph { display: block; width: 17px; height: 17px; }
+.row-del:hover:not(:disabled) {
+    color: var(--error);
+    border-color: rgba(248, 81, 73, .45);
+    background: rgba(248, 81, 73, .1);
+}
+.row-del:active:not(:disabled) { transform: scale(.9); }
+.row-del:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+.row-del:disabled { opacity: .3; cursor: not-allowed; }
+
+/* Пока идёт запрос удаления, глиф сменяется кольцом-спиннером: кнопка не
+   «моргает» текстом и остаётся того же размера. */
+.row-del.is-busy { color: var(--info); border-color: rgba(255, 148, 56, .4); }
+.row-del.is-busy .del-glyph { display: none; }
+.row-del.is-busy::after {
+    content: "";
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid currentColor; border-top-color: transparent;
+    animation: del-spin .7s linear infinite;
+}
+@keyframes del-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+    .row-del.is-busy::after { animation: none; }
+}
+
 /* ---------- Адаптив ----------
    Десктоп (≥1101px) не меняется вообще: все правила ниже только внутри @media.
    Узкие экраны: полосы горизонтальной прокрутки больше нет — таблица
@@ -220,6 +297,13 @@ tr.row-error td { background: rgba(248,81,73,.07); }
     }
     .tracks-table:not(.stem-table) th.col-num,
     .tracks-table:not(.stem-table) th.col-track { display: none; }
+    /* На мобилке BPM/тональность/длительность и так видны в карточке трека —
+       чипы-заголовки сверху только портят картину. Прячем все заголовки
+       (col-num/col-track и так скрыты выше), сортировка через чипы недоступна. */
+    .tracks-table:not(.stem-table) th[data-sort="bpm"],
+    .tracks-table:not(.stem-table) th[data-sort="key"],
+    .tracks-table:not(.stem-table) th[data-sort="duration"] { display: none; }
+    .tracks-table:not(.stem-table) thead { display: none; }
 
     .tracks-table:not(.stem-table) tbody { padding: 0 10px 10px; }
     .tracks-table:not(.stem-table) tbody tr {
@@ -231,23 +315,36 @@ tr.row-error td { background: rgba(248,81,73,.07); }
     .tracks-table:not(.stem-table) td {
         border: none; padding: 8px 12px; min-width: 0;
     }
-    .tracks-table:not(.stem-table) td.col-num { flex: 0 0 auto; width: auto; }
-    .tracks-table:not(.stem-table) td.col-track { flex: 1 1 auto; min-width: 0; }
+    .tracks-table:not(.stem-table) td.col-num { flex: 0 0 auto; width: auto; order: 0; }
+    /* basis 0 вместо auto: иначе ячейка названия занимает всю ширину по
+       содержимому, и корзинка не влезает в строку. С basis 0 она растёт на
+       свободное место, а корзинка встаёт справа в строке с номером. */
+    .tracks-table:not(.stem-table) td.col-track { flex: 1 1 0; min-width: 0; order: 1; }
+    /* Порядок задан явно: без него корзинка (последняя в разметке) оказывалась
+       ПОСЛЕ BPM/тональности/длительности — те три ячейки с basis 100% рвут
+       строку, и кнопка уезжала отдельной строкой в самый низ карточки. */
+    .tracks-table:not(.stem-table) td.col-act { flex: 0 0 auto; width: auto; order: 2; }
     .tracks-table:not(.stem-table) td.col-center {
         flex: 1 1 100%; display: flex; align-items: center;
         justify-content: space-between; gap: 12px; text-align: left;
         border-top: 1px solid #2a241c;
+        order: 3;
     }
     .tracks-table:not(.stem-table) td.col-center::before {
         content: attr(data-label);
         font-size: 11px; font-weight: 700; letter-spacing: 1px;
         text-transform: uppercase; color: var(--muted);
     }
+    /* Корзинку в карточке не растягиваем, как col-center, и подпись ей не
+       нужна — своя строка с data-label не рисуется. */
 }
 
 @media (max-width: 700px) {
     .toolbar { flex-direction: column; align-items: stretch; }
     .toolbar-left { flex-wrap: wrap; gap: 10px; min-width: 0; }
+    /* flex-basis 300px из базового правила в колонке растягивал полосу на всю
+       высоту тулбара — сбрасываем grow/basis и фиксируем высоту. */
+    .eq { flex: 0 1 auto; height: 44px; min-width: 0; width: 100%; }
     /* У блока журнала своя минимальная ширина 300px (components.css) — на
        экране в 320px доступно 276px, и именно он выдавливал страницу за
        край. Ниже этой ширины минимум не нужен: колонка и так в одну линию. */

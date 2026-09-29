@@ -72,7 +72,7 @@ core/                  — ядро, общее для всех модулей
 
 analysis/              — модуль «Обработка»
   index.php            — страница модуля; первым делом PageGuard
-  analysisApi.php      — роутер действий + функции-обработчики (start/get/upload/stop)
+  analysisApi.php      — роутер действий + функции-обработчики (start/get/upload/stop/delete)
   cli/analyze_cli.php  — фоновый демон: цикл по файлам inbox/
   assets/css/
     base.css           — :root переменные, reset, body, .app, @keyframes
@@ -80,21 +80,24 @@ analysis/              — модуль «Обработка»
                          dropzone, журнал-строка, тумблер «Подряд» (Apple-стиль)
     table.css          — тулбар, баннер, таблица, колонки, плеер, SVG-play, chips, @media
     Порядок подключения ВАЖЕН: base → components → table.
-  assets/js/           — 9 нативных ES-модулей (без сборки):
+  assets/js/           — 11 нативных ES-модулей (без сборки):
     main.js            — инициализация
     store.js           — синглтон-состояние, els, POLL_INTERVAL, TERMINAL_STATES, api.base
     utils.js           — fetchJson, fmtDuration, setBadge, renderLogs, showProgress, buildNameNode
     player.js          — Audio-плеер в строках + очередь «Подряд»; play-иконка = SVG
-    table.js           — renderTable и live-обновление строк
+    table.js           — renderTable, live-обновление строк, syncPlayButtons/syncDeleteButtons
     sort.js            — сортировка/перемешивание по заголовкам
     views.js           — переключение вью (upload/tracks), баннер по завершении
     upload.js          — загрузка multipart, refreshInbox
     analysis.js        — старт демона, опрос прогресса, восстановление «мёртвого» run, стоп
+    delete.js          — модалка подтверждения удаления, вызов delete_track, строка успеха в ленту
+    core/eq.js, core/ui.js — общие модули: EQ-кривые, лента/бейдж/блокировка ссылок
   classes/
     AnalysisService.php — анализ одного файла: вызывает core/PythonRunner, разбирает stdout
     AnalysisRunner.php  — цикл демона по всем файлам (reset → файлы → финал)
     AnalysisInterface.php, SortingInterface.php — контракты
     TracksIndex.php     — кэш результатов в storage/tracks.json + сборка строк таблицы
+    TrackCleaner.php    — удаление трека целиком (Inbox, sorted, {id}/ со стемами, storage)
     FileSorter.php      — перекладывание в music/sorted/, безопасные имена папок
     UploadService.php   — приём multipart-загрузки, санитизация имён, уникализация
   scripts/analyzer.py  — Python-анализатор BPM/Key/метаданные (см. раздел 5)
@@ -189,8 +192,11 @@ logs/                  — spawn-analysis.log(.err), spawn-stemgen.log(.err), ap
 | `lockNav(link, locked, reason, onBlocked)` | блокировка одной ссылки; обработчик клика вешается один раз и навсегда (на узле), `aria-disabled` ставится и снимается, `href` не трогается |
 | `createNav(config)` → `updateNav()` | контроллер на любое число ссылок; исключение внутри `busy()` не роняет навигацию — ссылка просто считается свободной |
 | `stagePercent(index, total)` | процент заполнения сегментированной шкалы по номеру этапа; `-1`/`NaN`/`total=0` → `0`, избыток обрезан в `100` |
+| `createLogLine(el, {badge})` → `{show(type, text), hide()}` | единственная лента на приложение. `show()` вешает `.is-show` на следующем кадре и перезапускает таймер жизни `LOG_LIFE_MS = 4000`; повторный `show()` с новым текстом гасит текущую строку (`LOG_SWAP_MS = 200` → build → `is-show`), иначе поверх старой появлялся бы дубль. `hide()` гасит немедленно и **обязательно снимает отложенную подмену** — иначе строка, спрятанная в момент прихода сообщения, «вылезала» обратно по своему таймеру (окно 200 мс подмены против 300 мс скрытия) |
 
 Подписи в меню единые на обеих страницах: **«Обработка»** и **«Стемы»**. Раньше на «Стемах» было «Обработка треков», и пользователь искал пункт другим названием.
+
+**Отдельной строки «Готово» после успеха нет — итог показывает бейдж.** `analysis.js` и `services/generation.js` в терминальной ветке зовут `hideLogLine()`, а не `appendLog()`: бейдж `ВЫПОЛНЕНО` говорит ровно то же самое, а лишняя строка ленты висела бы 4 секунды и вводила в заблуждение («полоса пропала, но лента зелёная»). Ошибки и остановки — наоборот, всегда с текстом: молча ушедший в `ГОТОВ` бейдж оставлял бы непонятно, что произошло.
 
 ---
 
@@ -405,7 +411,12 @@ python analyzer.py <абсолютный путь к треку> [файл-пр�
 - `handleStartAnalysis`: проверки порядка — уже идёт (`already_running`) → сосед жив (`blocked`) → inbox пуст (`idle`) → `flock` на `storage/analysis_start.lock` → `SpawnCli::spawn(cli/analyze_cli.php)` → **ожидание признаков жизни**: до 4 с (20 × 200 мс) опросом `readFresh()` ждём новый `run_id`/рост `last_ping`; если тишина — отдаём `error` с `logTail` (причина видна прямо в UI).
 - `handleGetProgress` / `handleGetInbox` добавляют `stemgen_running` (раздел 3).
 - `handleStopAnalysis`: не идёт → `idle`; иначе `requestStop()` (см. раздел 1, п. 8 — обычный `update()` здесь флаг затирал кэшем).
+- `handleDeleteTrack` (POST, form-поле `name` — **не query-строка**, иначе кириллица ломалась на `+`/`%20`): `name` обязателен, чужой action не перехватывается; живая очередь анализа или генерации → `blocked` (проверяется и живой демон, и `progress.json` со свежим `last_ping` — «хвост» мёртвого прогона блокировать не должен); дальше весь ввод-вывод только внутри `TrackCleaner`.
 - `Http::jsonResponse()` — JSON и `exit` (тип `never`).
+
+### `analysis/classes/TrackCleaner.php`
+
+Удаление трека = удалить исходник из `music/inbox/`, копию из `music/sorted/`, каталог `{id}/` со стемами, запись из `storage/tracks.json` и хвост `progress.json` (`forgetEverywhere()`). Правила: имя не может быть пустым/`.`/`..`/с разделителем пути; каждый канонический путь обязан лежать внутри своей базы после `realpath()` — это же отсекает symlink-ходы; в `music/sorted/` удаляются только каталоги `BPM*_Key*` верхнего уровня, не принадлежащие треку ничего не трогают; `meta.json` читается до удаления, а `{id}/` сверяется с ним же. Возвращается `deleted` (что именно) — его и показывает лента на 4 секунды.
 
 ### `analysis/classes/AnalysisRunner.php`
 

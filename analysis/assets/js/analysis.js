@@ -1,9 +1,9 @@
-import { state, els, TERMINAL_STATES, POLL_INTERVAL } from './store.js?v=16';
-import { fetchJson, appendLog, renderLogs, setBadge, updateProcessUI, hideLogLine } from './utils.js?v=16';
-import { rowProcessing, rowQueued, rowDone, rowError, rebuildRowIdle } from './table.js?v=16';
-import { syncPlayButtons } from './player.js?v=16';
-import { hideBanner } from './views.js?v=16';
-import { refreshInbox } from './upload.js?v=16';
+import { state, els, TERMINAL_STATES, POLL_INTERVAL } from './store.js?v=48';
+import { fetchJson, appendLog, renderLogs, setBadge, updateProcessUI, hideLogLine } from './utils.js?v=48';
+import { rowProcessing, rowQueued, rowDone, rowError, rebuildRowIdle, syncDeleteButtons } from './table.js?v=48';
+import { syncPlayButtons } from './player.js?v=48';
+import { hideBanner } from './views.js?v=48';
+import { refreshInbox } from './upload.js?v=48';
 
 // Демон шлёт сердцебиение (last_ping) раз в 10 с, поэтому 120 с молчания —
 // это уже точно не работающий процесс.
@@ -26,6 +26,7 @@ function recoverDeadRun() {
     setBadge('idle');
     updateProcessUI();
     syncPlayButtons();
+    syncDeleteButtons();
     appendLog({ time: '--:--:--', type: 'error', message: 'Фоновый процесс обработки не отвечает (завис). Состояние сброшено — запустите заново.' });
     refreshInbox();
 }
@@ -38,6 +39,7 @@ function finishProcessing(status) {
     updateProcessUI();
     setBadge(status);
     syncPlayButtons();
+    syncDeleteButtons();
 }
 
 // Запуск обработки: сервер сам поднимает отдельный фоновый процесс (CLI-демон),
@@ -69,6 +71,7 @@ function startProcessing() {
         ref.durCell.textContent = '—';
     });
     syncPlayButtons();
+    syncDeleteButtons();
 
     startPolling(true);
 }
@@ -187,6 +190,7 @@ function startPolling(launchAnalysis) {
     els.stopBtn.hidden = false;
     updateProcessUI();
     syncPlayButtons();
+    syncDeleteButtons();
 
     if (launchAnalysis) {
         fetchJson('start_analysis').then((res) => {
@@ -317,14 +321,23 @@ function pollProgress() {
                 updateProcessUI();
                 const stopped = status === 'stopped';
                 const failed = status === 'error';
-                // Раньше для 'error' писалось зелёное «Готово»: прогон упал,
-                // а страница рапортовала об успехе. Разводим все три финала.
-                appendLog({
-                    time: '--:--:--',
-                    type: stopped ? 'warning' : (failed ? 'error' : 'success'),
-                    message: stopped ? 'Остановлено' : (failed ? 'Ошибка обработки — смотрите журнал' : 'Готово'),
-                });
-                setTimeout(hideLogLine, 3000);
+                // Успешный финал строкой не дублируем: о прогоне и так говорит
+                // бейдж (RUNNING -> COMPLETE -> IDLE), а строка в тулбаре была
+                // вторым источником правды о том же событии — и он врал: она
+                // оставалась зелёной «SUCCESS Готово» спустя минуты после конца
+                // прогона и после новых событий. Прячем её, чтобы строка ушла
+                // вместе с последним сообщением демона.
+                // Остановку и ошибку по-прежнему объясняем словами: там бейдж
+                // молча гаснет в idle, и без строки непонятно, что случилось.
+                if (stopped || failed) {
+                    appendLog({
+                        time: '--:--:--',
+                        type: stopped ? 'warning' : 'error',
+                        message: stopped ? 'Остановлено' : 'Ошибка обработки — смотрите журнал',
+                    });
+                } else {
+                    hideLogLine();
+                }
                 refreshInbox();
             }
         })

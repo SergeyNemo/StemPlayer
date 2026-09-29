@@ -1,6 +1,6 @@
-import { state, els } from './store.js?v=16';
-import { fetchJson, appendLog } from './utils.js?v=16';
-import { switchToUpload, switchToTracks } from './views.js?v=16';
+import { state, els } from './store.js?v=48';
+import { fetchJson, appendLog } from './utils.js?v=48';
+import { switchToUpload, switchToTracks } from './views.js?v=48';
 
 // ---------- Загрузка файлов ----------
 

@@ -42,6 +42,7 @@
             } catch (e) {
                 this.activeTrack = null;
                 this.notify();
+                if (window.StereoEq) window.StereoEq.detach();
                 return;
             }
             if (this.activeTrack !== track) return; // пока декодировали — уже переключили
@@ -51,6 +52,8 @@
                 if (this.activeTrack === track) this.stop();
             });
             this.notify();
+            // Эквалайзер тулбара: зеркалим спектр мастера на обе стороны.
+            if (window.StereoEq) window.StereoEq.attachAnalyser(this.analyser);
         }
 
         toggle(track) {
@@ -62,6 +65,7 @@
             if (this.activeTrack) this.activeTrack.stop();
             this.activeTrack = null;
             this.notify();
+            if (window.StereoEq) window.StereoEq.detach();
         }
 
         notify() {

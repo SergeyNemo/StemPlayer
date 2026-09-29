@@ -11,6 +11,7 @@ declare(strict_types=1);
  *   analysisApi.php?action=get_folders    — дерево папок music/sorted/
  *   analysisApi.php?action=get_inbox      — строки таблицы треков (inbox + кэш результатов, + stemgen_running)
  *   analysisApi.php?action=upload         — POST multipart: загрузка треков в inbox/
+ *   analysisApi.php?action=delete_track   — POST name=<файл>: удалить трек из inbox/ вместе с копией, стемами и записями storage/
  *   analysisApi.php?action=stop_analysis  — запрос остановки текущего анализа
  *
  * Модуль работает только через CLI-демон и опрос состояния, поэтому синхронных
@@ -31,6 +32,7 @@ require_once __DIR__ . '/classes/TracksIndex.php';
 require_once __DIR__ . '/classes/AnalysisService.php';
 require_once __DIR__ . '/classes/UploadService.php';
 require_once __DIR__ . '/classes/AnalysisRunner.php';
+require_once __DIR__ . '/classes/TrackCleaner.php';
 
 // Long-running запросы не должны обрываться клиентом или сервером.
 ignore_user_abort(true);
@@ -50,6 +52,7 @@ match ($action) {
     'get_folders'    => handleGetFolders(),
     'get_inbox'      => handleGetInbox($inboxDir),
     'upload'         => handleUpload($inboxDir),
+    'delete_track'   => handleDeleteTrack($inboxDir, $progressStore, $flog),
     'stop_analysis'  => handleStopAnalysis($progressStore, $flog),
     default          => Http::jsonResponse(['error' => 'Неизвестное действие: ' . $action]),
 };
@@ -160,6 +163,95 @@ function handleGetInbox(string $inboxDir): never
         'rows'            => $index->buildRows($runner->collectInboxFiles($inboxDir)),
         'stemgen_running' => RunState::otherModuleRunning(RunState::ANALYSIS),
     ]);
+}
+
+/**
+ * Удаление трека «отовсюду»: исходник из inbox/, копия и стемы из
+ * music/sorted/, записи из storage/. Подтверждение — на странице (delete.js).
+ */
+function handleDeleteTrack(string $inboxDir, ProgressStore $store, FileLog $flog): never
+{
+    $name = trim((string) ($_GET['name'] ?? $_POST['name'] ?? ''));
+
+    if ($name === '') {
+        Http::jsonResponse(['status' => 'error', 'message' => 'Не указан трек для удаления.']);
+    }
+
+    // Живой демон держит в памяти список файлов, собранный при старте, и ждёт
+    // их на диске: удаление трека посреди прогона роняет его именно на этом
+    // треке. Поэтому на странице кнопки гаснут на время работы, а здесь та же
+    // проверка — на случай второго окна или подделанного запроса.
+    $state = $store->read();
+
+    if (($state['status'] ?? '') === 'running' && RunState::isFresh($state)) {
+        Http::jsonResponse([
+            'status'  => 'error',
+            'message' => 'Идёт обработка — дождитесь окончания, потом удалите трек.',
+        ]);
+    }
+
+    try {
+        $report = (new TrackCleaner($inboxDir))->delete($name);
+    } catch (InvalidArgumentException $e) {
+        Http::jsonResponse(['status' => 'error', 'message' => $e->getMessage()]);
+    }
+
+    $flog->write('info', sprintf(
+        'Удалён трек «%s»: inbox %s, копий %d, каталогов стемов %d, папок %d, tracks.json %s.',
+        $report['name'],
+        $report['inbox'] ? 'удалён' : 'не было',
+        $report['copies'],
+        $report['stems'],
+        $report['folders'],
+        $report['tracks_index'] ? 'чищен' : 'без записи',
+    ));
+
+    Http::jsonResponse([
+        'status'  => 'ok',
+        'deleted' => $report,
+        'message' => deleteMessage($report),
+    ]);
+}
+
+/**
+ * Человеческое подтверждение удаления: перечисляем, что именно снесено, —
+ * по отчёту TrackCleaner, а не по предположению.
+ *
+ * @param array{name: string, inbox: bool, copies: int, stems: int, folders: int, tracks_index: bool, progress: array<string, mixed>} $report
+ */
+function deleteMessage(array $report): string
+{
+    if (!$report['inbox']) {
+        return sprintf('«%s»: файла в Inbox уже не было, хранилище очищено.', $report['name']);
+    }
+
+    $parts = ['исходник из Inbox'];
+
+    if ($report['copies'] > 0) {
+        $parts[] = 'копия в music/sorted';
+    }
+
+    if ($report['stems'] > 0) {
+        $parts[] = 'каталоги стемов (' . $report['stems'] . ')';
+    }
+
+    if ($report['tracks_index']) {
+        $parts[] = 'запись из storage/tracks.json';
+    }
+
+    $progress = $report['progress'];
+    $touched  = is_array($progress) ? array_filter([
+        $progress['done'] ?? false,
+        $progress['error'] ?? false,
+        $progress['current'] ?? false,
+        ($progress['folders'] ?? 0) > 0,
+    ]) : [];
+
+    if ($touched !== []) {
+        $parts[] = 'состояние прогона (progress.json)';
+    }
+
+    return sprintf('«%s» удалён: %s.', $report['name'], implode(', ', $parts));
 }
 
 /**

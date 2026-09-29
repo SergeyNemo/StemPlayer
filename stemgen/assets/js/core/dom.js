@@ -6,7 +6,6 @@
         statusBadge: document.getElementById('status-badge'),
         generateBtn: document.getElementById('generate-btn'),
         stopBtn: document.getElementById('stop-btn'),
-        trackTotal: document.getElementById('track-total-text'),
         progressBar: document.getElementById('progress-bar'),
         overallProgress: document.getElementById('overall-progress'),
         banner: document.getElementById('banner'),

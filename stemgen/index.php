@@ -22,10 +22,10 @@ PageGuard::enforce(RunState::STEMGEN);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>StemPlayer — Стемы</title>
-    <link rel="stylesheet" href="../analysis/assets/css/base.css?v=55">
-    <link rel="stylesheet" href="../analysis/assets/css/components.css?v=55">
-    <link rel="stylesheet" href="../analysis/assets/css/table.css?v=55">
-    <link rel="stylesheet" href="assets/css/stemgen.css?v=55">
+    <link rel="stylesheet" href="../analysis/assets/css/base.css?v=79">
+    <link rel="stylesheet" href="../analysis/assets/css/components.css?v=79">
+    <link rel="stylesheet" href="../analysis/assets/css/table.css?v=79">
+    <link rel="stylesheet" href="assets/css/stemgen.css?v=79">
 </head>
 <body>
     <div class="app">
@@ -54,7 +54,9 @@ PageGuard::enforce(RunState::STEMGEN);
                     <button class="btn btn-primary" id="generate-btn" type="button">Сгенерировать стемы</button>
                     <button class="btn btn-ghost btn-stop" id="stop-btn" type="button" hidden>■ Стоп</button>
                 </div>
-                <span class="toolbar-meta" id="track-total-text">Треков: 0</span>
+                <div class="eq" id="stereo-eq" title="Каналы L/R — левый слева, правый справа: разбегается от центра">
+                    <canvas></canvas>
+                </div>
                 <div class="toolbar-right">
                     <div class="overall-progress" id="overall-progress" hidden>
                         <div class="progress-track"><div class="progress-bar" id="progress-bar"></div></div>
@@ -76,22 +78,23 @@ PageGuard::enforce(RunState::STEMGEN);
     <!-- Общее UI-ядро (бейдж статуса + блокировка ссылок в шапке):
          то же, что на странице «Обработка», - чтобы меню и статус
          вели себя одинаково на обоих модулях. -->
-    <script src="../analysis/assets/js/core/ui.js?v=55"></script>
-    <script src="assets/js/core/constants.js?v=55"></script>
-    <script src="assets/js/core/dom.js?v=55"></script>
-    <script src="assets/js/core/store.js?v=55"></script>
-    <script src="assets/js/core/utils.js?v=55"></script>
-    <script src="assets/js/services/api.js?v=55"></script>
-    <script src="assets/js/services/notifier.js?v=55"></script>
-    <script src="assets/js/engine/stem.js?v=55"></script>
-    <script src="assets/js/engine/track.js?v=55"></script>
-    <script src="assets/js/engine/player.js?v=55"></script>
-    <script src="assets/js/engine/waveform.js?v=55"></script>
-    <script src="assets/js/ui/spectrum.js?v=55"></script>
-    <script src="assets/js/ui/level-meter.js?v=55"></script>
-    <script src="assets/js/ui/channel.js?v=55"></script>
-    <script src="assets/js/ui/table.js?v=55"></script>
-    <script src="assets/js/services/generation.js?v=55"></script>
-    <script src="assets/js/app.js?v=55"></script>
+    <script src="../analysis/assets/js/core/ui.js?v=79"></script>
+    <script src="../analysis/assets/js/core/eq.js?v=79"></script>
+    <script src="assets/js/core/constants.js?v=79"></script>
+    <script src="assets/js/core/dom.js?v=79"></script>
+    <script src="assets/js/core/store.js?v=79"></script>
+    <script src="assets/js/core/utils.js?v=79"></script>
+    <script src="assets/js/services/api.js?v=79"></script>
+    <script src="assets/js/services/notifier.js?v=79"></script>
+    <script src="assets/js/engine/stem.js?v=79"></script>
+    <script src="assets/js/engine/track.js?v=79"></script>
+    <script src="assets/js/engine/player.js?v=79"></script>
+    <script src="assets/js/engine/waveform.js?v=79"></script>
+    <script src="assets/js/ui/spectrum.js?v=79"></script>
+    <script src="assets/js/ui/level-meter.js?v=79"></script>
+    <script src="assets/js/ui/channel.js?v=79"></script>
+    <script src="assets/js/ui/table.js?v=79"></script>
+    <script src="assets/js/services/generation.js?v=79"></script>
+    <script src="assets/js/app.js?v=79"></script>
 </body>
 </html>

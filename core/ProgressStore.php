@@ -66,6 +66,16 @@ final class ProgressStore
     private bool $stopCache = false;
 
     /**
+     * Сохранить прежний last_ping при следующей записи.
+     *
+     * Файл состояния пишется не только демоном: forgetEverywhere() правит его
+     * из веб-запроса. Без этого флага такая запись обновила бы last_ping на
+     * «сейчас», и опрос страницы снова счёл бы давно мёртвый прогон живым —
+     * детект смерти демона построен именно на last_ping.
+     */
+    private bool $keepLastPing = false;
+
+    /**
      * Значение stop_requested, которое следующая запись обязана поставить
      * буквально, минуя подстановку из файла. null = взять значение из файла.
      *
@@ -293,6 +303,94 @@ final class ProgressStore
     }
 
     /**
+     * Чистит состояние прогона от всех следов трека: done_files, error_files,
+     * current_file, снимок folders и строка журнала, если в ней есть имя.
+     *
+     * Отдельный метод от forget(): там убирались только два списка, а при
+     * удалении трека со страницы progress.json не должен продолжать называть
+     * уже несуществующий файл. Если упоминаний не нашлось — файл вообще не
+     * трогаем (запись ради записи обновила бы last_ping, см. $keepLastPing).
+     *
+     * @return array{done: bool, error: bool, current: bool, folders: int, message: bool} Что вычищено.
+     */
+    public function forgetEverywhere(string $name): array
+    {
+        $state = $this->read();
+        $done  = is_array($state['done_files'] ?? null) ? $state['done_files'] : [];
+        $errs  = is_array($state['error_files'] ?? null) ? $state['error_files'] : [];
+
+        $touched = [
+            'done'    => array_key_exists($name, $done),
+            'error'   => array_key_exists($name, $errs),
+            'current' => (string) ($state['current_file'] ?? '') === $name,
+            'folders' => 0,
+            'message' => $this->mentionsName($state['last_message'] ?? null, $name),
+        ];
+
+        $folders = $state['folders'] ?? null;
+
+        if (is_array($folders)) {
+            foreach ($folders as $i => $folder) {
+                if (!is_array($folder) || !is_array($folder['files'] ?? null)) {
+                    continue;
+                }
+
+                $files = array_values(array_filter(
+                    $folder['files'],
+                    static fn ($file): bool => strcasecmp(basename((string) $file), $name) !== 0,
+                ));
+
+                $removed = count($folder['files']) - count($files);
+
+                if ($removed > 0) {
+                    $folders[$i]['files'] = $files;
+                    $touched['folders']   += $removed;
+                }
+            }
+        }
+
+        if (!$touched['done'] && !$touched['error'] && !$touched['current']
+            && $touched['folders'] === 0 && !$touched['message']) {
+            return $touched;
+        }
+
+        unset($done[$name], $errs[$name]);
+
+        $patch = ['done_files' => $done, 'error_files' => $errs];
+
+        if ($touched['current']) {
+            $patch['current_file'] = '';
+        }
+
+        if ($touched['folders'] > 0) {
+            $patch['folders'] = $folders;
+        }
+
+        if ($touched['message']) {
+            $patch['last_message'] = null;
+        }
+
+        $this->keepLastPing = true;
+        $this->update($patch);
+
+        return $touched;
+    }
+
+    /**
+     * Есть ли имя трека в тексте записи журнала.
+     */
+    private function mentionsName(mixed $entry, string $name): bool
+    {
+        if (!is_array($entry)) {
+            return false;
+        }
+
+        $text = (string) ($entry['message'] ?? '');
+
+        return $text !== '' && stripos($text, $name) !== false;
+    }
+
+    /**
      * Журнал — одна текущая строка вместо растущего массива: полоска/строка
      * журнала на фронте и так показывает только последнее сообщение.
      */
@@ -347,7 +445,14 @@ final class ProgressStore
 
         // Сердцебиение: каждая запись в progress.json помечает процесс живым.
         // Привязка любого обновления к времени — основа детекта «мёртвого running».
-        $state['last_ping'] = time();
+        // Исключение — forgetEverywhere(): там last_ping переносится из прежнего
+        // состояния, иначе удаление трека со страницы «воскресило» бы прогон,
+        // который демон не подтверждает уже давно.
+        if (!$this->keepLastPing) {
+            $state['last_ping'] = time();
+        }
+
+        $this->keepLastPing = false;
 
         // Флаг остановки: если его никто не менял явно в этой записи — берём
         // значение с диска. Демон пишет из своего кэша в памяти, и его

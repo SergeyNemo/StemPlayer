@@ -22,9 +22,9 @@ PageGuard::enforce(RunState::ANALYSIS);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>StemPlayer — Обработка</title>
-    <link rel="stylesheet" href="assets/css/base.css?v=16">
-    <link rel="stylesheet" href="assets/css/components.css?v=16">
-    <link rel="stylesheet" href="assets/css/table.css?v=16">
+    <link rel="stylesheet" href="assets/css/base.css?v=79">
+    <link rel="stylesheet" href="assets/css/components.css?v=79">
+    <link rel="stylesheet" href="assets/css/table.css?v=79">
 </head>
 <body>
     <div class="app">
@@ -33,11 +33,14 @@ PageGuard::enforce(RunState::ANALYSIS);
                 <span class="brand-dot"></span>
                 <h1>StemPlayer <small>Обработка</small></h1>
             </div>
-            <nav class="nav">
-                <a href="../index.php" id="nav-home">Главная</a>
-                <a href="index.php" class="active">Обработка</a>
-                <a href="../stemgen/index.php" id="nav-stemgen">Стемы</a>
-            </nav>
+            <div class="header-tools">
+                <button class="btn btn-ghost btn-add" id="add-btn" type="button">+ Добавить треки</button>
+                <nav class="nav">
+                    <a href="../index.php" id="nav-home">Главная</a>
+                    <a href="index.php" class="active">Обработка</a>
+                    <a href="../stemgen/index.php" id="nav-stemgen">Стемы</a>
+                </nav>
+            </div>
             <div class="status-badge" id="status-badge" data-state="idle">idle</div>
         </header>
 
@@ -61,11 +64,10 @@ PageGuard::enforce(RunState::ANALYSIS);
             <div class="toolbar">
                 <div class="toolbar-left">
                     <button class="btn btn-primary" id="process-btn" type="button">Обработать</button>
-                    <button class="btn btn-ghost" id="add-btn" type="button">+ Добавить треки</button>
                     <button class="btn btn-ghost btn-stop" id="stop-btn" type="button" hidden>■ Стоп</button>
-                    <span class="toolbar-meta">
-                        <span id="track-total-text">Треков нет</span>
-                    </span>
+                </div>
+                <div class="eq" id="stereo-eq" title="Каналы L/R — левый слева, правый справа: разбегается от центра">
+                    <canvas></canvas>
                 </div>
                 <div class="toolbar-right">
                     <div class="overall-progress" id="overall-progress" hidden>
@@ -88,6 +90,7 @@ PageGuard::enforce(RunState::ANALYSIS);
                             <th class="col-center" data-sort="bpm" title="Сортировать по BPM">BPM <span class="sort-ind"></span></th>
                             <th class="col-center" data-sort="key" title="Сортировать по тональности">Тональность <span class="sort-ind"></span></th>
                             <th class="col-center" data-sort="duration" title="Сортировать по длительности">Длительность <span class="sort-ind"></span></th>
+                            <th class="col-act" title="Удаление трека"></th>
                         </tr>
                     </thead>
                     <tbody id="tracks-tbody"></tbody>
@@ -96,10 +99,35 @@ PageGuard::enforce(RunState::ANALYSIS);
         </section>
     </div>
 
+    <!-- Подтверждение удаления трека. Отдельный оверлей, а не confirm():
+         подтверждение перечисляет, что исчезнет с диска (Inbox, копия, стемы,
+         записи storage), и рисуется теми же панелями/кнопками, что и сайт.
+         Содержимое подставляет delete.js (имя трека — только через textContent). -->
+    <div class="modal-overlay" id="del-overlay" hidden>
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="del-title" aria-describedby="del-text">
+            <div class="modal-head">
+                <span class="modal-icon" id="del-icon" aria-hidden="true"></span>
+                <h3 class="modal-title" id="del-title">Удалить трек из Inbox?</h3>
+            </div>
+            <p class="modal-text" id="del-text">Трек <strong id="del-name"></strong> будет удалён отовсюду:</p>
+            <ul class="modal-list">
+                <li>исходник из <code>music/inbox/</code></li>
+                <li>копия и стемы из <code>music/sorted/</code></li>
+                <li>записи из <code>storage/</code> (tracks.json, progress.json)</li>
+            </ul>
+            <p class="modal-note">Восстановить трек будет нельзя.</p>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" type="button" id="del-cancel">Отмена</button>
+                <button class="btn btn-danger" type="button" id="del-confirm">Удалить</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Общее UI-ядро: бейдж статуса + блокировка ссылок в шапке.
          Классический скрипт, а не модуль: нужен и «Обработке» (ES-модули),
          и «Стемам» (window.StemGen), и выполняется раньше них. -->
-    <script src="assets/js/core/ui.js?v=16"></script>
-    <script type="module" src="assets/js/main.js?v=16"></script>
+    <script src="assets/js/core/ui.js?v=79"></script>
+    <script src="assets/js/core/eq.js?v=79"></script>
+    <script type="module" src="assets/js/main.js?v=79"></script>
 </body>
 </html>

@@ -16,7 +16,6 @@ const els = {
     addBtn: $('#add-btn'),
     processBtn: $('#process-btn'),
     stopBtn: $('#stop-btn'),
-    trackTotalText: $('#track-total-text'),
     progressBar: $('#progress-bar'),
     overallProgress: $('#overall-progress'),
     banner: $('#banner'),
@@ -25,11 +24,17 @@ const els = {
     logLine: $('#log-line'),
     stemsLink: $('#nav-stemgen'),
     homeLink: $('#nav-home'),
+    // Модалка подтверждения удаления (delete.js)
+    delOverlay: $('#del-overlay'),
+    delName: $('#del-name'),
+    delIcon: $('#del-icon'),
+    delCancel: $('#del-cancel'),
+    delConfirm: $('#del-confirm'),
 };
 
 const state = {
     rows: [],                 // строки из get_inbox
-    rowRefs: new Map(),       // name -> {tr, nameCell, bpmCell, keyCell, durCell, playBtn, playWrapper, playFill, playTime, playBar, busyState}
+    rowRefs: new Map(),       // name -> {tr, nameCell, bpmCell, keyCell, durCell, delBtn, playBtn, playWrapper, playFill, playTime, playBar, busyState}
     sort: {},                 // { key: 'num'|'track'|'bpm'|'key'|'duration', dir: 1|-1|0 }
     mode: 'idle',             // 'idle' | 'processing' | 'poll' | 'done'
     pollTimer: null,

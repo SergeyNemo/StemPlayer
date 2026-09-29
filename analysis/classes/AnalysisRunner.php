@@ -166,7 +166,10 @@ final class AnalysisRunner
 
             $sortedCount++;
             $folder = basename(dirname($destination));
-            $store->log('success', 'Успех: BPM ' . $bpm . ', Key ' . $key . ' -> ' . $folder);
+            // В ленту тулбара успех по треку не пишем: строка таблицы уже
+            // показывает BPM/Key, а надпись «Успех: …» была вторым источником
+            // правды об одном и том же и висела в тулбаре после прогона.
+            // В файловый журнал запись остаётся — там она полезна.
             $log->write('success', 'Готово: ' . $name . ' (BPM ' . $bpm . ', Key ' . $key . ') -> ' . $folder);
 
             $metaMeta = $this->writeStemMeta($destination, $name, $bpm, $key, $duration, $result);

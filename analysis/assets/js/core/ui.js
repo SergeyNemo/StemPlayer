@@ -25,6 +25,125 @@ window.StemUI = (function () {
     /** Статусы, которые показываем ненадолго и потом возвращаем в idle. */
     var HOLD_STATES = ['complete', 'error'];
 
+    /**
+     * Сколько живёт строка журнала, пока не придёт следующая.
+     *
+     * Общая величина для обеих страниц. Раньше строки жили вечно: лента
+     * показывала последнюю запись и держала её, пока не случалось что-то
+     * ещё. Из-за этого на экране навсегда оставались «Загружено файлов: 1»,
+     * «Сначала обработайте хотя бы один трек», зелёные «Готово» и «… удалён»
+     * — сообщения о событиях, которые давно закончились. Теперь строка
+     * гаснет сама, а приход новой продлевает жизнь последней.
+     */
+    var LOG_LIFE_MS = 4000;
+
+    /** Старая строка гаснет перед подменой, новая проявляется. */
+    var LOG_SWAP_MS = 200;
+
+    /** Пауза между снятием класса и-hidden, чтобы гаснение было видно. */
+    var LOG_HIDE_MS = 300;
+
+    var LOG_TYPES = ['info', 'success', 'error', 'warning'];
+
+    // ---------------------------------------------------------------- журнал
+
+    /**
+     * Строка журнала: одна реализация на «Обработку» и «Стемы».
+     *
+     * Правило поведения везде одинаковое:
+     *   - новая запись сменяет старую (старая гаснет, новая проявляется);
+     *   - если новая не пришла за LOG_LIFE_MS, строка исчезает сама;
+     *   - hide() гасит немедленно и отменяет отложенную подмену, иначе
+     *     строка, которую только что спрятали, успевала появиться снова
+     *     (подмена срабатывает через 200 мс, скрытие ждёт 300 мс).
+     *
+     * Подписи типа («SUCCESS», «OK», «ИНФО», «ОШИБКА») в строке нет: тип и так
+     * виден по цвету самой строки, а слово занимало место и повторяло то, что
+     * уже показывает бейдж статуса в шапке. Сверху остаётся индикатор, внизу —
+     * сама строка журнала.
+     *
+     * @param {HTMLElement|null} el элемент .log-line
+     * @param {{lifeMs?: number}} [opts]
+     * @returns {{append: (type: string, message: string) => void,
+     *            hide: () => void}}
+     */
+    function createLogLine(el, opts) {
+        var cfg = opts || {};
+        var lifeMs = cfg.lifeMs || LOG_LIFE_MS;
+
+        var swapTimer = null;
+        var lifeTimer = null;
+        var hideTimer = null;
+
+        function clearTimers() {
+            if (swapTimer !== null) { clearTimeout(swapTimer); swapTimer = null; }
+            if (lifeTimer !== null) { clearTimeout(lifeTimer); lifeTimer = null; }
+            if (hideTimer !== null) { clearTimeout(hideTimer); hideTimer = null; }
+        }
+
+        function build(type, message) {
+            el.className = 'log-line log-' + type;
+            el.innerHTML = '';
+
+            var t = document.createElement('span');
+            t.className = 'message';
+            // textContent, а не innerHTML: текст приходит из демона и из
+            // имён файлов, там не должно быть возможности вписать разметку.
+            t.textContent = message || '';
+
+            el.appendChild(t);
+            el.hidden = false;
+
+            requestAnimationFrame(function () {
+                requestAnimationFrame(function () { el.classList.add('is-show'); });
+            });
+        }
+
+        function hide() {
+            if (!el) return;
+            clearTimers();
+            el.classList.remove('is-show');
+
+            hideTimer = setTimeout(function () {
+                hideTimer = null;
+                if (!el.classList.contains('is-show')) el.hidden = true;
+            }, LOG_HIDE_MS);
+        }
+
+        function armLife() {
+            if (lifeTimer !== null) clearTimeout(lifeTimer);
+            lifeTimer = setTimeout(function () {
+                lifeTimer = null;
+                hide();
+            }, lifeMs);
+        }
+
+        function append(type, message) {
+            if (!el) return;
+
+            var t = LOG_TYPES.indexOf(type) >= 0 ? type : 'info';
+
+            if (swapTimer !== null) {
+                clearTimeout(swapTimer);
+                swapTimer = null;
+            }
+
+            if (!el.hidden && el.classList.contains('is-show')) {
+                el.classList.remove('is-show');
+                swapTimer = setTimeout(function () {
+                    swapTimer = null;
+                    build(t, message);
+                    armLife();
+                }, LOG_SWAP_MS);
+            } else {
+                build(t, message);
+                armLife();
+            }
+        }
+
+        return { append: append, hide: hide };
+    }
+
     // ---------------------------------------------------------------- бейдж
 
     /**
@@ -175,7 +294,9 @@ window.StemUI = (function () {
     return {
         BADGE_HOLD_MS: BADGE_HOLD_MS,
         HOLD_STATES: HOLD_STATES,
+        LOG_LIFE_MS: LOG_LIFE_MS,
         createBadge: createBadge,
+        createLogLine: createLogLine,
         lockNav: lockNav,
         createNav: createNav,
         stagePercent: stagePercent,
