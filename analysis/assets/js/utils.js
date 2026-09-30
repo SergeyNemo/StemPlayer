@@ -1,4 +1,4 @@
-import { els, state, api } from './store.js?v=48';
+import { els, state, api } from './store.js?v=80';
 
 function fetchJson(action, options) {
     return fetch(`${api.base}?action=${encodeURIComponent(action)}`, { cache: 'no-store', ...(options || {}) })

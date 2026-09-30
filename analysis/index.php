@@ -22,9 +22,9 @@ PageGuard::enforce(RunState::ANALYSIS);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>StemPlayer — Обработка</title>
-    <link rel="stylesheet" href="assets/css/base.css?v=79">
-    <link rel="stylesheet" href="assets/css/components.css?v=79">
-    <link rel="stylesheet" href="assets/css/table.css?v=79">
+    <link rel="stylesheet" href="assets/css/base.css?v=80">
+    <link rel="stylesheet" href="assets/css/components.css?v=80">
+    <link rel="stylesheet" href="assets/css/table.css?v=80">
 </head>
 <body>
     <div class="app">
@@ -126,8 +126,8 @@ PageGuard::enforce(RunState::ANALYSIS);
     <!-- Общее UI-ядро: бейдж статуса + блокировка ссылок в шапке.
          Классический скрипт, а не модуль: нужен и «Обработке» (ES-модули),
          и «Стемам» (window.StemGen), и выполняется раньше них. -->
-    <script src="assets/js/core/ui.js?v=79"></script>
-    <script src="assets/js/core/eq.js?v=79"></script>
-    <script type="module" src="assets/js/main.js?v=79"></script>
+    <script src="assets/js/core/ui.js?v=80"></script>
+    <script src="assets/js/core/eq.js?v=80"></script>
+    <script type="module" src="assets/js/main.js?v=80"></script>
 </body>
 </html>

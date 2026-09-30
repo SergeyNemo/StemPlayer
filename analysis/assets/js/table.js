@@ -1,6 +1,6 @@
-import { state, els } from './store.js?v=48';
-import { buildPlayButton, bindSeek, applyPlaybackState, fmtMinSec } from './player.js?v=48';
-import { fmtDuration, buildNameNode, trashIcon } from './utils.js?v=48';
+import { state, els } from './store.js?v=80';
+import { buildPlayButton, bindSeek, applyPlaybackState, fmtMinSec } from './player.js?v=80';
+import { fmtDuration, buildNameNode, trashIcon } from './utils.js?v=80';
 
 // Число ступеней шкалы = ProgressStore::STAGES на сервере. Держим в одном
 // месте, чтобы ширина считалась от одного числа; порядок подписей сервер

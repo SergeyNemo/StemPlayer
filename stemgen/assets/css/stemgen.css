@@ -105,6 +105,16 @@
     transition: border-color .15s ease, opacity .15s ease;
 }
 
+/* Перемотка: вся панель канала — зона клика/перетаскивания. touch-action:none
+   обязателен, иначе на телефоне палец тянет страницу, а не полосу. */
+.chan.is-seekable {
+    cursor: pointer;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+.chan.is-seekable:hover { border-color: rgba(255, 148, 56, .38); }
+
 .chan-spec {
     position: absolute; left: 0; top: 0; width: 100%; height: 100%;
     border-radius: inherit; pointer-events: none;

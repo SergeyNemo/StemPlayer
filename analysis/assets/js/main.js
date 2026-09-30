@@ -1,11 +1,11 @@
-import { els, state } from './store.js?v=48';
-import { fetchJson, setBadge, renderLogs, appendLog } from './utils.js?v=48';
-import { initPlayer } from './player.js?v=48';
-import { switchToUpload, switchToTracks } from './views.js?v=48';
-import { sortBy } from './sort.js?v=48';
-import { bindUpload } from './upload.js?v=48';
-import { initDelete } from './delete.js?v=48';
-import { startProcessing, requestStop, startPolling } from './analysis.js?v=48';
+import { els, state } from './store.js?v=80';
+import { fetchJson, setBadge, renderLogs, appendLog } from './utils.js?v=80';
+import { initPlayer } from './player.js?v=80';
+import { switchToUpload, switchToTracks } from './views.js?v=80';
+import { sortBy } from './sort.js?v=80';
+import { bindUpload } from './upload.js?v=80';
+import { initDelete } from './delete.js?v=80';
+import { startProcessing, requestStop, startPolling } from './analysis.js?v=80';
 
 // ---------- Инициализация ----------
 

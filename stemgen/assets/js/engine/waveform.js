@@ -205,15 +205,25 @@
 
             if (!playing) {
                 // Не играем: волну рисуем один раз, без курсора.
-                if (!r.ch.specDrawn) {
+                // specHasCursor — «последний кадр был с курсором». Без этой
+                // проверки после стопа canvas оставался с последним playing-кадром:
+                // specDrawn уже true, поэтому перерисовки не было, и полоса
+                // зависала на месте до следующего нажатия play.
+                // clearRect обязателен: курсор рисуется на всю высоту панели, а
+                // волна — по центру и ниже/выше не заходит. Без очистки края
+                // курсора и хвост шлейфа оставались бы поверх чистой волны.
+                if (!r.ch.specDrawn || r.ch.specHasCursor) {
+                    c.clearRect(0, 0, w, h);
                     c.drawImage(src, 0, 0, src.width, src.height, 0, fy, w, fh);
                     r.ch.specDrawn = true;
+                    r.ch.specHasCursor = false;
                 }
                 return;
             }
 
             // Играем: перерисовываем каждый кадр, добавляем курсор и шлейф.
             r.ch.specDrawn = true;
+            r.ch.specHasCursor = true;
             c.clearRect(0, 0, w, h);
             c.drawImage(src, 0, 0, src.width, src.height, 0, fy, w, fh);
 

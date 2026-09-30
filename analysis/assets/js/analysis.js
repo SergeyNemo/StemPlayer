@@ -1,9 +1,9 @@
-import { state, els, TERMINAL_STATES, POLL_INTERVAL } from './store.js?v=48';
-import { fetchJson, appendLog, renderLogs, setBadge, updateProcessUI, hideLogLine } from './utils.js?v=48';
-import { rowProcessing, rowQueued, rowDone, rowError, rebuildRowIdle, syncDeleteButtons } from './table.js?v=48';
-import { syncPlayButtons } from './player.js?v=48';
-import { hideBanner } from './views.js?v=48';
-import { refreshInbox } from './upload.js?v=48';
+import { state, els, TERMINAL_STATES, POLL_INTERVAL } from './store.js?v=80';
+import { fetchJson, appendLog, renderLogs, setBadge, updateProcessUI, hideLogLine } from './utils.js?v=80';
+import { rowProcessing, rowQueued, rowDone, rowError, rebuildRowIdle, syncDeleteButtons } from './table.js?v=80';
+import { syncPlayButtons } from './player.js?v=80';
+import { hideBanner } from './views.js?v=80';
+import { refreshInbox } from './upload.js?v=80';
 
 // Демон шлёт сердцебиение (last_ping) раз в 10 с, поэтому 120 с молчания —
 // это уже точно не работающий процесс.

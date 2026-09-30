@@ -30,6 +30,10 @@
             this.analyser = null;
             this.source = null;
             this.startAt = 0;
+            // Смещение внутри буфера, с которого запущен источник (перемотка).
+            // В currentTime оно обязательно: ctx.currentTime - startAt даёт
+            // время от старта ИСТОЧНИКА, а не от начала трека.
+            this.offset = 0;
         }
 
         get duration() { return this.buffer ? this.buffer.duration : 0; }
@@ -43,7 +47,7 @@
 
         get currentTime() {
             if (!this.source || !this.ctx) return 0;
-            const t = this.ctx.currentTime - this.startAt;
+            const t = this.ctx.currentTime - this.startAt + this.offset;
             return Math.max(0, Math.min(t, this.duration));
         }
 
@@ -112,16 +116,23 @@
             if (this.onMix) this.onMix();
         }
 
-        play(when, onEnd) {
+        // offset — с какого места буфера играть (перемотка). Без него start
+        // идёт с нуля, и после стоп/переключения трек всегда начинался заново.
+        // offset >= duration Chrome считает RangeError, поэтому уходим на
+        // последние 20 мс: трек доиграет и сам выключится, как и должен.
+        play(when, onEnd, offset) {
             this.stop();
             if (!this.ctx || !this.buffer || !this.gain) return;
+            const dur = this.buffer.duration;
+            const off = Math.max(0, Math.min(Number(offset) || 0, Math.max(0, dur - 0.02)));
             const src = this.ctx.createBufferSource();
             src.buffer = this.buffer;
             src.connect(this.gain);
             src.onended = () => { if (onEnd) onEnd(this); };
-            src.start(when);
+            src.start(when, off);
             this.source = src;
             this.startAt = when;
+            this.offset = off;
         }
 
         stop() {
@@ -131,6 +142,7 @@
                 this.source.onended = null;
                 this.source = null;
             }
+            this.offset = 0;
         }
     }
 

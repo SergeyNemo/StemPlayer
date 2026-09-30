@@ -29,14 +29,23 @@
             await Promise.all(this.stems.filter((s) => s.url).map((s) => s.load(ctx)));
         }
 
-        play(when, onAllEnd) {
+        // Длительность трека по уже загруженным стемам. До первого play
+        // буферов нет и она равна 0 — перемотку по доли это не ломает,
+        // Player ждёт prepare() и пересчитывает долю в секунды сам.
+        get duration() {
+            return this.stems.reduce((m, s) => (s.buffer ? Math.max(m, s.duration) : m), 0);
+        }
+
+        // offset — общая точка старта для всех стемов: стемы играют из одного
+        // момента, поэтому и перематываются вместе (одним offset).
+        play(when, onAllEnd, offset) {
             const playing = this.stems.filter((s) => s.url);
             let ended = 0;
             const onStemEnd = () => {
                 ended += 1;
                 if (onAllEnd && ended >= playing.length) onAllEnd(this);
             };
-            playing.forEach((s) => s.play(when, onStemEnd));
+            playing.forEach((s) => s.play(when, onStemEnd, offset));
         }
 
         stop() { this.stems.forEach((s) => s.stop()); }

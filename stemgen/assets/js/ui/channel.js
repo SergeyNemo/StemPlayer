@@ -73,37 +73,72 @@
 
         if (stem.hasAudio) {
             ensureSpec(stem);
+            this.bindSeek();
+        } else {
+            this.panel.title = 'Файла стема нет';
         }
 
         this.setState();
     }
 
-        get state() {
-            return this.stem.state; // 'absent' | 'muted' | 'active'
-        }
-
-        // Применяем CSS-состояния канала.
-        setState() {
-            const s = this.state;
-            this.item.classList.toggle('is-muted', s === 'muted');
-            this.item.classList.toggle('is-absent', s === 'absent');
-        }
-
-        // Единая точка правки UI микса: галка, подпись процентов, вид канала.
-        syncMixUI() {
-            this.muteBox.checked = this.stem.enabled;
-            this.muteBox.title = this.stem.enabled
-                ? 'Канал включён — щёлкните, чтобы приглушить'
-                : 'Канал выключен — щёлкните, чтобы вернуть громкость';
-            this.meter.update();
-            this.setState();
-        }
-
-        // Воспроизведение трека началось/закончилось (для данного канала).
-        setPlaying(isActive) {
-            this.item.classList.toggle('is-playing', isActive);
-        }
+    get state() {
+        return this.stem.state; // 'absent' | 'muted' | 'active'
     }
+
+    // Применяем CSS-состояния канала.
+    setState() {
+        const s = this.state;
+        this.item.classList.toggle('is-muted', s === 'muted');
+        this.item.classList.toggle('is-absent', s === 'absent');
+    }
+
+    // Единая точка правки UI микса: галка, подпись процентов, вид канала.
+    syncMixUI() {
+        this.muteBox.checked = this.stem.enabled;
+        this.muteBox.title = this.stem.enabled
+            ? 'Канал включён — щёлкните, чтобы приглушить'
+            : 'Канал выключен — щёлкните, чтобы вернуть громкость';
+        this.meter.update();
+        this.setState();
+    }
+
+    // Воспроизведение трека началось/закончилось (для данного канала).
+    setPlaying(isActive) {
+        this.item.classList.toggle('is-playing', isActive);
+    }
+
+    // Перемотка кликом и перетаскиванием по любой стемной волне.
+    // Клик по месту, где играет, — перемотка на месте; клик по остановленному
+    // треку — старт с этого места. Правую кнопку игнорируем (контекстное меню).
+    bindSeek() {
+        const panel = this.panel;
+        let dragging = false;
+
+        const seekTo = (e) => {
+            const rect = panel.getBoundingClientRect();
+            if (!rect.width) return;
+            const frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+            G.player.seekTo(this.track, frac);
+        };
+
+        panel.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            dragging = true;
+            try { panel.setPointerCapture(e.pointerId); } catch (err) { /* нет захвата */ }
+            seekTo(e);
+        });
+        panel.addEventListener('pointermove', (e) => {
+            if (dragging) seekTo(e);
+        });
+        const end = () => { dragging = false; };
+        panel.addEventListener('pointerup', end);
+        panel.addEventListener('pointercancel', end);
+
+        panel.classList.add('is-seekable');
+        panel.title = 'Щёлкните или потяните — перемотать с этого места';
+    }
+}
 
     G.Channel = Channel;
 })(window.StemGen);
