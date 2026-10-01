@@ -1,5 +1,5 @@
-import { state } from './store.js?v=80';
-import { appendLog } from './utils.js?v=80';
+import { state, els } from './store.js?v=93';
+import { appendLog } from './utils.js?v=93';
 
 // ---------- Плеер ----------
 
@@ -189,13 +189,18 @@ function playNextInQueue() {
     return true;
 }
 
-// Кнопки play: заблокированы, пока идёт обработка (текущее окно или другое).
+// Кнопки play: заблокированы, пока на экране кнопка «Обработать».
+// Именно её видимость, а не state.mode: updateProcessUI прячет кнопку, когда
+// все треки обработаны (hidden = allDone), и это единственный честный признак
+// «всё готово». После остановки mode ещё секунду не idle, а играть уже можно и
+// нужно — поэтому ориентируемся на кнопку, а не на остатки режима. То же
+// условие у эквалайзера в table.css: кнопка есть — EQ не показываем.
 function syncPlayButtons() {
-    const running = state.mode === 'processing' || state.mode === 'poll';
+    const locked = !els.processBtn.hidden;
     state.rowRefs.forEach((ref) => {
         const done = ref.row.status === 'done';
-        ref.playBtn.disabled = running || !done;
-        ref.playBtn.title = running ? 'Обработка идёт' : done ? 'Играть / пауза' : 'Не обработан';
+        ref.playBtn.disabled = locked || !done;
+        ref.playBtn.title = locked ? 'Обработка идёт' : done ? 'Играть / пауза' : 'Не обработан';
     });
 }
 

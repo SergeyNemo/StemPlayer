@@ -2,7 +2,7 @@
 (function (G) {
     const { state, els, API } = G;
     const {
-        setBadge, showProgress, appendLog, renderLogs, hideBanner, fetchJson,
+        showProgress, appendLog, renderLogs, fetchJson,
         rowWorking, rowDoneRow, rowErrorRow, refreshTracks, updateNav,
     } = G;
 
@@ -32,6 +32,10 @@
                 ? 'Идёт генерация'
                 : 'Сгенерировать стемы';
         els.generateBtn.title = blocked && !gen ? 'Запустите после завершения обработки' : '';
+        // Видимость кнопки — признак «всё готово», по нему же разблокируется
+        // play и решается судьба эквалайзера (table.css). Здесь он меняется, и
+        // только здесь, поэтому дёргаем синхронизацию именно здесь.
+        G.syncPlayButtons();
         showProgress(gen);
         updateNav();
     };
@@ -61,13 +65,8 @@
         els.stopBtn.hidden = false;
         resetStopBtn();
 
-        hideBanner();
         G.hideLogLine();
-        setBadge('running');
-        // Total — только треки без готовых стемов (готовые сервер пропустит).
-        const todo = state.rows.filter((r) => !r.done).length;
         G.updateGenerateUI();
-        appendLog({ time: '--:--:--', type: 'info', message: `Начинаю разделение (${todo || state.rows.length} трек(ов))…` });
 
         // Треки без стемов встают в очередь «В ожидании».
         state.rows.forEach((row) => {
@@ -82,30 +81,29 @@
                     appendLog({ time: '--:--:--', type: 'warning', message: res.message || 'Генерация уже выполняется.' });
                 } else if (res.status === 'blocked') {
                     appendLog({ time: '--:--:--', type: 'error', message: res.message || 'Сейчас идёт обработка треков.' });
-                    finishGeneration('idle');
+                    finishGeneration();
                 } else if (res.status === 'idle') {
                     appendLog({ time: '--:--:--', type: 'warning', message: res.message || 'Нет треков для разделения.' });
-                    finishGeneration('complete');
+                    finishGeneration();
                 } else if (res.status === 'error') {
                     appendLog({ time: '--:--:--', type: 'error', message: 'Не удалось запустить генерацию.' });
-                    finishGeneration('error');
+                    finishGeneration();
                 }
             })
             .catch(() => {
                 appendLog({ time: '--:--:--', type: 'error', message: 'Не удалось связаться с сервером при запуске генерации.' });
-                finishGeneration('error');
+                finishGeneration();
             });
 
         G.startPolling(false);
     };
 
-    function finishGeneration(status) {
+    function finishGeneration() {
         stopPolling();
         state.generating = false;
         state.launched = false;
         G.resetStopBtn();
         els.stopBtn.hidden = true;
-        setBadge(status);
         G.updateGenerateUI();
     }
 
@@ -162,7 +160,6 @@
         state.stopping = true;
         els.stopBtn.disabled = true;
         els.stopBtn.textContent = 'Останавливаю…';
-        appendLog({ time: '--:--:--', type: 'warning', message: 'Запрошена остановка: завершаю текущий трек и откатываю прогон…' });
         fetchJson('stop_generation').catch(() => {
             resetStopBtn();
             appendLog({ time: '--:--:--', type: 'error', message: 'Нет связи с сервером — запрос остановки не отправлен.' });
@@ -209,8 +206,8 @@
                 const status = p.status || 'idle';
 
                 // Демон ещё не проснулся — терминальный статус не наш. Молча
-                // ждём 'running' и не трогаем ни бейдж, ни журнал, ни строки:
-                // иначе мелькнёт зелёное «Готово» от старого прогона, а полоса
+                // ждём 'running' и не трогаем ни журнал, ни строки: иначе
+                // мелькнёт зелёное «Готово» от старого прогона, а полоса
                 // прогресса на треке пропадёт (finishGeneration -> refreshTracks).
                 if (state.awaitingRun && status !== 'running') {
                     if (Date.now() - state.launchedAt > LAUNCH_WAIT_MS) {
@@ -220,7 +217,7 @@
                             type: 'error',
                             message: 'Демон не начал прогон за ' + Math.round(LAUNCH_WAIT_MS / 1000) + ' с — состояние сброшено, запустите заново.',
                         });
-                        finishGeneration('idle');
+                        finishGeneration();
                         refreshTracks().catch(() => {});
                     }
                     return;
@@ -229,9 +226,6 @@
                 if (status === 'running') {
                     state.awaitingRun = false;
                 }
-
-                setBadge(status);
-                renderLogs(p.last_message);
 
                 if (status === 'running') {
                     // Демон шлёт сердцебиение (last_ping) раз в 10 с, поэтому
@@ -244,12 +238,19 @@
                         state.launched = false;
                         G.resetStopBtn();
                         els.stopBtn.hidden = true;
-                        setBadge('idle');
                         G.updateGenerateUI();
                         appendLog({ time: '--:--:--', type: 'error', message: 'Фоновый процесс генерации не отвечает (завис). Состояние сброшено — запустите заново.' });
                         refreshTracks().catch(() => {});
                         return;
                     }
+
+                    // Живая строка журнала прогона — единственная текстовая
+                    // подпись под прогрессбаром. Терминальные last_message
+                    // («Генерация завершена: обработано…», «Остановлено:
+                    // обработано…») сюда НЕ идут: это итог прошлого прогона.
+                    // Итог показываем один раз, когда прогон реально дошёл
+                    // до конца, — см. logRunFinished ниже.
+                    renderLogs(p.last_message);
 
                     if (p.current_file) {
                         // Демон перешёл к следующему треку — предыдущий уже
@@ -278,19 +279,16 @@
                     state.launched = false;
                     G.resetStopBtn();
                     els.stopBtn.hidden = true;
-                    // Успешный финал строкой не пишем: о генерации и так говорит
-                    // бейдж (RUNNING -> COMPLETE -> IDLE). Зелёная «OK Готово»
-                    // была вторым источником правды о том же событии и просто
-                    // висела на экране после конца прогона. Прячем ленту.
-                    // Остановку и ошибку по-прежнему объясняем словами.
-                    if (status === 'complete') {
-                        G.hideLogLine();
+                    // Итог прогона. Индикатор статуса в шапке удалён, и раньше он
+                    // был единственным местом, где пользователь узнавал о финале:
+                    // строка молчала намеренно, чтобы не висеть зелёной «Готово»
+                    // спустя минуты после конца. Теперь показываем итог ОДИН раз
+                    // и на LOG_FINAL_MS, сообщением демона из last_message.
+                    // Остановку не дублируем: пользователь инициировал её сам.
+                    if (status === 'stopped') {
+                        G.logRunFinished(null, 'Остановлено');
                     } else {
-                        appendLog({
-                            time: '--:--:--',
-                            type: status === 'stopped' ? 'warning' : 'error',
-                            message: status === 'stopped' ? 'Остановлено' : 'Ошибка генерации — смотрите журнал',
-                        });
+                        G.logRunFinished(p.last_message, 'Готово');
                     }
                     G.updateGenerateUI();
                     refreshTracks().catch(() => {});

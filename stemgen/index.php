@@ -22,24 +22,23 @@ PageGuard::enforce(RunState::STEMGEN);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>StemPlayer — Стемы</title>
-    <link rel="stylesheet" href="../analysis/assets/css/base.css?v=80">
-    <link rel="stylesheet" href="../analysis/assets/css/components.css?v=80">
-    <link rel="stylesheet" href="../analysis/assets/css/table.css?v=80">
-    <link rel="stylesheet" href="assets/css/stemgen.css?v=80">
+    <link rel="stylesheet" href="../analysis/assets/css/base.css?v=93">
+    <link rel="stylesheet" href="../analysis/assets/css/components.css?v=93">
+    <link rel="stylesheet" href="../analysis/assets/css/table.css?v=93">
+    <link rel="stylesheet" href="assets/css/stemgen.css?v=93">
 </head>
 <body>
     <div class="app">
         <header class="header">
             <div class="brand">
                 <span class="brand-dot"></span>
-                <h1>StemPlayer <small>Стемы</small></h1>
+                <h1>StemPlayer</h1>
             </div>
             <nav class="nav">
                 <a href="../index.php" id="nav-home">Главная</a>
                 <a href="../analysis/index.php" id="nav-analysis">Обработка</a>
                 <a href="index.php" class="active">Стемы</a>
             </nav>
-            <div class="status-badge" id="status-badge" data-state="idle">idle</div>
         </header>
 
         <section class="lock-screen" id="lock-screen" hidden>
@@ -65,8 +64,6 @@ PageGuard::enforce(RunState::STEMGEN);
                 </div>
             </div>
 
-            <div class="banner" id="banner" hidden></div>
-
             <div class="table-wrap">
                 <table class="tracks-table stem-table">
                     <tbody id="tracks-tbody"></tbody>
@@ -78,23 +75,24 @@ PageGuard::enforce(RunState::STEMGEN);
     <!-- Общее UI-ядро (бейдж статуса + блокировка ссылок в шапке):
          то же, что на странице «Обработка», - чтобы меню и статус
          вели себя одинаково на обоих модулях. -->
-    <script src="../analysis/assets/js/core/ui.js?v=80"></script>
-    <script src="../analysis/assets/js/core/eq.js?v=80"></script>
-    <script src="assets/js/core/constants.js?v=80"></script>
-    <script src="assets/js/core/dom.js?v=80"></script>
-    <script src="assets/js/core/store.js?v=80"></script>
-    <script src="assets/js/core/utils.js?v=80"></script>
-    <script src="assets/js/services/api.js?v=80"></script>
-    <script src="assets/js/services/notifier.js?v=80"></script>
-    <script src="assets/js/engine/stem.js?v=80"></script>
-    <script src="assets/js/engine/track.js?v=80"></script>
-    <script src="assets/js/engine/player.js?v=80"></script>
-    <script src="assets/js/engine/waveform.js?v=80"></script>
-    <script src="assets/js/ui/spectrum.js?v=80"></script>
-    <script src="assets/js/ui/level-meter.js?v=80"></script>
-    <script src="assets/js/ui/channel.js?v=80"></script>
-    <script src="assets/js/ui/table.js?v=80"></script>
-    <script src="assets/js/services/generation.js?v=80"></script>
-    <script src="assets/js/app.js?v=80"></script>
+    <script src="../analysis/assets/js/core/ui.js?v=93"></script>
+    <script src="../analysis/assets/js/core/eq.js?v=93"></script>
+    <script src="assets/js/core/constants.js?v=93"></script>
+    <script src="assets/js/core/dom.js?v=93"></script>
+    <script src="assets/js/core/store.js?v=93"></script>
+    <script src="assets/js/core/utils.js?v=93"></script>
+    <script src="assets/js/services/api.js?v=93"></script>
+    <script src="assets/js/services/notifier.js?v=93"></script>
+    <script src="assets/js/services/download.js?v=93"></script>
+    <script src="assets/js/engine/stem.js?v=93"></script>
+    <script src="assets/js/engine/track.js?v=93"></script>
+    <script src="assets/js/engine/player.js?v=93"></script>
+    <script src="assets/js/engine/waveform.js?v=93"></script>
+    <script src="assets/js/ui/spectrum.js?v=93"></script>
+    <script src="assets/js/ui/level-meter.js?v=93"></script>
+    <script src="assets/js/ui/channel.js?v=93"></script>
+    <script src="assets/js/ui/table.js?v=93"></script>
+    <script src="assets/js/services/generation.js?v=93"></script>
+    <script src="assets/js/app.js?v=93"></script>
 </body>
 </html>

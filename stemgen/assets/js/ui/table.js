@@ -106,7 +106,7 @@
             const playBtn = document.createElement('button');
             playBtn.type = 'button';
             playBtn.className = 'chan-play card-play';
-            playBtn.disabled = !row.done;
+            playBtn.disabled = G.playLocked() || !row.done;
             const pPlay = document.createElement('span');
             pPlay.className = 'stem-pause';
             pPlay.append(document.createElement('i'), document.createElement('i'));
@@ -186,7 +186,10 @@
             tr.appendChild(td);
             els.tbody.appendChild(tr);
 
-            state.rowRefs.set(row.name, { tr, chip, fill, wrap, stageLab, stageShown: -1, playBtn, trackId: row.id, nameBox, nameEq });
+            // done держим в ref: G.syncPlayButtons обходит готовые строки без
+            // перерисовки таблицы, а перечитывать get_tracks ради одного флага
+            // рано — тем более что он меняется на ходу прогона.
+            state.rowRefs.set(row.name, { tr, chip, fill, wrap, stageLab, stageShown: -1, playBtn, trackId: row.id, nameBox, nameEq, done: !!row.done });
         });
 
         G.syncPlayingUI();
@@ -279,16 +282,39 @@
         }
     };
 
+    // Блокировка play — по кнопке «Сгенерировать стемы», а не по mode
+    // прогенерации: пока кнопка на экране, все треки не разбиты и играть не
+    // во что; как только updateGenerateUI её спрятал (всё готово) — play
+    // разложен, даже если прогон останавливали. То же условие у эквалайзера
+    // в table.css: кнопка есть — EQ не показываем.
+    G.playLocked = function playLocked() {
+        return !!els.generateBtn && !els.generateBtn.hidden;
+    };
+    G.syncPlayButtons = function syncPlayButtons() {
+        const locked = G.playLocked();
+        state.rowRefs.forEach((ref) => {
+            if (!ref.playBtn) return;
+            const done = ref.done;
+            ref.playBtn.disabled = locked || !done;
+            ref.playBtn.title = locked ? 'Генерация идёт' : done ? 'Играть / пауза' : 'Стемов ещё нет';
+        });
+    };
+
     G.rowDoneRow = function rowDoneRow(name) {
         const ref = state.rowRefs.get(name);
         if (ref) {
             ref.tr.classList.remove('row-processing', 'row-error');
             ref.tr.classList.add('row-done');
+            // Стем только что появился: снимаем блокировку play по факту, не
+            // дожидаясь перерисовки таблицы. Пока на экране кнопка
+            // «Сгенерировать стемы», syncPlayButtons оставит кнопку заблокированной.
+            ref.done = true;
         }
         // Зелёный чип — как «✓ Обработано» на странице «Обработка». Слово
         // «готово» здесь путало: на «генерация…» с подписью последнего этапа
         // пользователь читал его как статус трека, а не как этап шкалы.
         G.setRowState(name, '✓ Сгенерировано', 'ok');
+        G.syncPlayButtons();
     };
 
     G.rowErrorRow = function rowErrorRow(name, message) {

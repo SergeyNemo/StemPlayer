@@ -1,6 +1,6 @@
-import { state, els } from './store.js?v=80';
-import { fetchJson, appendLog } from './utils.js?v=80';
-import { switchToUpload, switchToTracks } from './views.js?v=80';
+import { state, els } from './store.js?v=93';
+import { fetchJson, appendLog } from './utils.js?v=93';
+import { switchToUpload, switchToTracks } from './views.js?v=93';
 
 // ---------- Загрузка файлов ----------
 
@@ -85,4 +85,4 @@ function bindUpload() {
     els.dropzone.addEventListener('drop', (e) => uploadFiles(e.dataTransfer.files));
 }
 
-export { uploadFiles, refreshInbox, bindUpload };
+export { refreshInbox, bindUpload };

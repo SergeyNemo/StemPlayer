@@ -1,46 +1,86 @@
 /* ---------- Вид «таблица» ---------- */
 .tracks-view { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .toolbar {
-    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: nowrap;
     padding: 14px 16px; border-radius: 12px;
     background: var(--panel); border: 1px solid var(--panel-border);
     min-width: 0;
+    /* Фиксированная высота строки: 56 px под EQ + padding. Раньше тулбар
+       «прыгал» высотой по содержимому (кнопка / полоса / журнал / EQ), и
+       при переходах между состояниями страница дёргалась. min-height, а не
+       height: на узких экранах колонка из нескольких элементов выше 56 px,
+       и жёсткая высота там обрезала бы содержимое. */
+    position: relative; min-height: 84px;
 }
 .toolbar-left { display: flex; align-items: center; gap: 14px; order: 0; }
-.toolbar-meta { color: var(--muted); font-size: 13px; font-weight: 600; }
 /* Когда все треки обработаны, кнопки прячутся, а прогресс с журналом и так
    скрыты (utils.js: updateProcessUI). Пустые группы оставляли после себя
    строку высотой 0, и эквалайзер из-за row-gap уезжал от центра тулбара вниз.
    Нет видимых детей — нет и строки: остаётся только eq, ровно по центру. */
 .toolbar-left:not(:has(> :not([hidden]))),
 .toolbar-right:not(:has(> :not([hidden]))) { display: none; }
+/* Журнал не должен уезжать влево. .toolbar — flex с space-between, а когда все
+   треки обработаны, кнопки схлопываются (правило выше) и блок с полосой и
+   лентой остаётся ЕДИНСТВЕННЫМ видимым ребёнком. space-between ставит
+   одиночку в начало строки, поэтому строка журнала переезжала налево, на
+   освободившееся место кнопки, и читалась как ещё одна надпись в тулбаре.
+   margin-left:auto держит полосу и журнал у правого края всегда — строка
+   остаётся ровно под полосой индикатора, слева остаются только кнопки. */
+.toolbar-right { margin-left: auto; }
 
 /* ---------- Стерео-эквалайзер в тулбаре ----------
-   Отдельная полоса во всю ширину тулбара: от центра разбегаются столбики —
-   левый канал влево, правый вправо. Активен только во время воспроизведения.
-   Пока видны кнопки или журнал — полоса стоит на своей строке под ними; когда
-   они скрыты (пустые группы схлопнуты правилом выше), остаётся одна и
-   оказывается ровно по центру тулбара. */
+   Полоса во всю ширину тулбара: от центра разбегаются столбики — левый канал
+   влево, правый вправо. Активен только во время воспроизведения.
+   Живёт НЕ под кнопками отдельной строкой, а в той же строке тулбара, поверх
+   неё: position:absolute + min-height у .toolbar. Иначе тулбар менял высоту
+   по содержимому — с кнопкой 140 px, без кнопки 86 px, а с отдельной строкой
+   EQ под кнопками он всегда оставался высоким, и «полупустой» тулбар с
+   кнопкой в углу читался как ещё одна надпись. Теперь высота зафиксирована
+   (56 px строка + padding), а EQ подкладывается под кнопку: кнопка на экране —
+   EQ не виден, кнопка исчезла (всё обработано) — EQ встаёт на её место.
+   Видимая часть (рамка, фон, картинка) рисуется только в .is-active, то есть
+   когда EQ реально рисует: рамка с пустым canvas читалась за «строку» в
+   тулбаре. Клики сквозь него проходят — он перекрывает всю строку. */
 .eq {
-    position: relative; flex: 1 1 100%; order: 2; min-width: 0; height: 56px;
-    border: 1px solid var(--panel-border); border-radius: 12px;
-    background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(0,0,0,.14));
+    position: absolute; inset: 14px 16px;
+    border: 1px solid transparent; border-radius: 12px;
+    background: none;
     overflow: hidden;
+    pointer-events: none;
 }
 .eq canvas { position: absolute; inset: 0; opacity: 0; transition: opacity .25s ease; }
-.eq.is-active canvas { opacity: .8; }
-
-.banner {
-    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-    padding: 12px 16px; border-radius: 12px;
-    font-family: var(--mono); font-size: 13.5px; font-weight: 600;
-    background: var(--panel); border: 1px solid var(--panel-border);
-    border-left: 3px solid var(--accent); color: var(--text);
-    opacity: 0; transform: translateY(-6px);
-    transition: opacity .35s ease, transform .35s ease;
+.eq.is-active {
+    border-color: var(--panel-border);
+    background: linear-gradient(180deg, rgba(255,255,255,.02), rgba(0,0,0,.14));
 }
-.banner.is-visible { opacity: 1; transform: translateY(0); }
-.banner-text strong { color: var(--success); font-weight: 700; }
+.eq.is-active canvas { opacity: .8; }
+/* Фон: ничего не играет, но тулбар не должен читаться пустым. eq.js в этом
+   состоянии рисует свою волну (басы приподняты, гребень идёт от краёв к
+   центру) — analysers не читаются, стоит 20 кадров в секунду. Рамки и фона
+   нет намеренно: полоса тут не «полоса», а признак жизни, и лишняя рамка
+   снова сделала бы из неё строку в тулбаре. */
+.eq.is-idle canvas { opacity: .3; }
+/* Пока на экране главная кнопка, EQ не прячется, а притухает: EQ лежит
+   абсолютным слоем поверх всей строки тулбара, поэтому на время кнопки он
+   перекрывается её подложкой. Раньше здесь стояло opacity: 0, и эквалайзер
+   исчезал совсем — при добавлении трека (главная кнопка появляется) играющий
+   EQ пропадал, хотя звук шёл. Теперь он гаснет до 0.1: рамка и спектр почти
+   не видны и не спорят с кнопкой, но видно, что полоса на месте и она живая.
+   Как только кнопка скрылась (всё обработано) — плавно возвращается к
+   рабочему виду через transition на .eq canvas.
+   Селектор по id, а не «хоть одна кнопка»: главная кнопка и «Стоп» — разные
+   вещи, и «Стоп» после остановки прячется раньше главной. Правила идут
+   после .is-active и с большей специфичностью за счёт #id внутри :has(),
+   поэтому перебивают его. Место в раскладке (высота тулбара) не меняется.
+   Плавность — из transition на .eq canvas (.25s): кнопка появилась → 0.8→0.1,
+   кнопка скрылась → 0.1→0.8, само собой и без jump. */
+.toolbar:has(> .toolbar-left > #process-btn:not([hidden])) .eq,
+.toolbar:has(> .toolbar-left > #generate-btn:not([hidden])) .eq {
+    border-color: transparent;
+    background: none;
+}
+.toolbar:has(> .toolbar-left > #process-btn:not([hidden])) .eq canvas,
+.toolbar:has(> .toolbar-left > #generate-btn:not([hidden])) .eq canvas { opacity: .1; }
 
 /* ---------- Таблица ---------- */
 .table-wrap {
@@ -340,15 +380,25 @@ tr.row-error td { background: rgba(248,81,73,.07); }
 }
 
 @media (max-width: 700px) {
-    .toolbar { flex-direction: column; align-items: stretch; }
+    .toolbar { flex-direction: column; align-items: stretch; min-height: 0; }
     .toolbar-left { flex-wrap: wrap; gap: 10px; min-width: 0; }
-    /* flex-basis 300px из базового правила в колонке растягивал полосу на всю
-       высоту тулбара — сбрасываем grow/basis и фиксируем высоту. */
-    .eq { flex: 0 1 auto; height: 44px; min-width: 0; width: 100%; }
+    /* В колонке EQ возвращается в поток своей строкой: absolute-слой на всю
+       высоту колонки перекрыл бы кнопки и журнал, а подкладывать его под
+       кнопку в колонке негде — там каждый элемент на своей строке.
+       Два обязательных обнуления, оба — ловушки relative:
+       1) relative, а НЕ static: canvas внутри .eq абсолютный
+          (position:absolute; inset:0), и его containing block — ближайший
+          позиционированный предок; со static им становился .toolbar, и
+          спектр рисовался от левого верхнего угла тулбара.
+       2) inset:auto — у absolute-версии это отступы от краёв тулбара, а у
+          relative браузер читает их как СМЕЩЕНИЕ самого элемента: без
+          обнуления EQ уезжал на 16 px вправо и 14 px вниз, рамка вылезала
+          за тулбар и спектр обрезался. */
+    .eq { position: relative; inset: auto; flex: 0 1 auto; height: 44px; min-width: 0; width: 100%; }
     /* У блока журнала своя минимальная ширина 300px (components.css) — на
        экране в 320px доступно 276px, и именно он выдавливал страницу за
        край. Ниже этой ширины минимум не нужен: колонка и так в одну линию. */
-    .toolbar-right { min-width: 0; max-width: none; }
+    .toolbar-right { min-width: 0; max-width: none; margin-left: 0; }
     .overall-progress { max-width: none; }
     /* Длинный warn-текст (например, «Обнаружен идущий анализ») не переносим —
        только обрезаем многоточием. На совсем узких экранах этого мало: содержимое

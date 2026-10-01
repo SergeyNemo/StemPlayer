@@ -38,6 +38,20 @@
             this.nameEl.textContent = STEM_LABELS[stem.kind] || stem.kind;
             this.nameEl.title = STEM_NAMES[stem.kind];
 
+            // Кнопка «сохранить стем» — перед подписью, отдельным узлом (не
+            // обёрткой вокруг неё): у .stem-chan-name свой ellipsis, и если
+            // завернуть иконку внутрь, обрезка длинной подписи поедет.
+            // pointerdown гасим отдельно от click: панель канала целиком
+            // ловит его для перемотки (bindSeek ниже), и без этого клик по
+            // иконке ещё и перематывал бы трек.
+            this.saveBtn = document.createElement('button');
+            this.saveBtn.type = 'button';
+            this.saveBtn.className = 'chan-save';
+            this.saveBtn.appendChild(G.saveIcon());
+            this.saveBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+            this.saveBtn.addEventListener('click', (e) => this.saveStem(e));
+            this.syncSaveBtn();
+
             this.timeEl = document.createElement('span');
             this.timeEl.className = 'chan-time';
             this.timeEl.textContent = '0:00';
@@ -47,7 +61,7 @@
             this.durEl = document.createElement('span');
             this.durEl.className = 'chan-dur';
             this.durEl.textContent = '0:00';
-            trow.append(this.nameEl, this.timeEl, sep, this.durEl);
+            trow.append(this.saveBtn, this.nameEl, this.timeEl, sep, this.durEl);
 
         this.panel.append(this.specEl, trow);
 
@@ -90,6 +104,40 @@
         const s = this.state;
         this.item.classList.toggle('is-muted', s === 'muted');
         this.item.classList.toggle('is-absent', s === 'absent');
+    }
+
+    // Состояние кнопки «сохранить»: недоступна, пока файла нет или идёт
+    // скачивание. Подсказка показывает итоговое имя файла — пользователь
+    // должен видеть «Artist - Song_vocal.mp3» ДО нажатия, а не удивляться
+    // имени, которое выдумал бы браузер (fccc0c08_vocals.mp3).
+    syncSaveBtn() {
+        if (!this.saveBtn) return;
+        const has = this.stem.hasAudio;
+        const hint = has
+            ? `Сохранить стем: ${G.stemFileName(this.track.name, this.stem.kind)}`
+            : 'Файла стема нет';
+
+        this.saveBtn.title = hint;
+        this.saveBtn.setAttribute('aria-label', hint);
+        this.saveBtn.disabled = !has || !!this.saveBusy;
+    }
+
+    // Сохранение стема в файл с именем трека. Пока идёт запрос — кнопка
+    // гаснет: повторные клики плодили бы копии одного и того же файла.
+    saveStem(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (this.saveBusy || !this.stem.hasAudio) return;
+
+        this.saveBusy = true;
+        this.saveBtn.classList.add('is-busy');
+        this.syncSaveBtn();
+
+        G.downloadStem(this.stem, this.track.name).finally(() => {
+            this.saveBusy = false;
+            this.saveBtn.classList.remove('is-busy');
+            this.syncSaveBtn();
+        });
     }
 
     // Единая точка правки UI микса: галка, подпись процентов, вид канала.

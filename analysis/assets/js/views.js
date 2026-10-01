@@ -1,6 +1,6 @@
-import { els, state } from './store.js?v=80';
-import { setBadge, updateProcessUI } from './utils.js?v=80';
-import { renderTable } from './table.js?v=80';
+import { els, state } from './store.js?v=93';
+import { updateProcessUI } from './utils.js?v=93';
+import { renderTable } from './table.js?v=93';
 
 // ---------- Состояния-вью ----------
 
@@ -8,7 +8,6 @@ function switchToUpload() {
     els.uploadZone.hidden = false;
     els.tracksView.hidden = true;
     els.processBtn.disabled = true;
-    setBadge('idle');
     updateProcessUI();
 }
 
@@ -22,33 +21,6 @@ function switchToTracks(rows) {
     updateProcessUI();
 }
 
-let bannerTimer = null;
-
-// Плавно показываем баннер, через 3 секунды плавно прячем.
-function showBanner(text) {
-    if (bannerTimer) {
-        clearTimeout(bannerTimer);
-        bannerTimer = null;
-    }
-
-    els.bannerText.textContent = text;
-    els.banner.hidden = false;
-
-    // Переход display:none -> flex нельзя анимировать сразу, ждём следующий кадр.
-    requestAnimationFrame(() => requestAnimationFrame(() => els.banner.classList.add('is-visible')));
-
-    bannerTimer = setTimeout(() => hideBanner(), 3000);
-}
-
-function hideBanner() {
-    if (bannerTimer) {
-        clearTimeout(bannerTimer);
-        bannerTimer = null;
-    }
-    els.banner.classList.remove('is-visible');
-    setTimeout(() => {
-        if (!els.banner.classList.contains('is-visible')) els.banner.hidden = true;
-    }, 350);
-}
-
-export { switchToUpload, switchToTracks, showBanner, hideBanner };
+// Баннер-хвост сверху таблицы удалён: единственная текстовая подпись на
+// странице — живая строка журнала под прогрессбаром.
+export { switchToUpload, switchToTracks };

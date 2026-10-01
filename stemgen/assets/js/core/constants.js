@@ -7,6 +7,12 @@ window.StemGen = window.StemGen || {};
     G.API = 'stemgenApi.php';
     G.STEM_ORDER = ['other', 'vocals', 'bass', 'drums'];
     G.STEM_NAMES = { other: 'Музыка', vocals: 'Вокал', bass: 'Басс', drums: 'Ударные' };
+    // Суффиксы сохраняемых файлов: other→music, vocals→vocal, bass→bass,
+    // drums→drums. Ключи те же, что у STEM_ORDER, а слова — НЕ как в подписи
+    // на экране (STEM_LABELS в ui/channel.js): подпись можно переименовать
+    // когда угодно, а имя уже сохранённого файла меняться не должно. Поэтому
+    // это отдельная карта, а не производная от подписи.
+    G.STEM_FILE_SUFFIX = { other: 'music', vocals: 'vocal', bass: 'bass', drums: 'drums' };
     G.TERMINAL = ['complete', 'error', 'stopped'];
 
     // Этапы разбиения трека — тот же список, что шлёт stem_splitter.py

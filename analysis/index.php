@@ -22,16 +22,16 @@ PageGuard::enforce(RunState::ANALYSIS);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>StemPlayer — Обработка</title>
-    <link rel="stylesheet" href="assets/css/base.css?v=80">
-    <link rel="stylesheet" href="assets/css/components.css?v=80">
-    <link rel="stylesheet" href="assets/css/table.css?v=80">
+    <link rel="stylesheet" href="assets/css/base.css?v=93">
+    <link rel="stylesheet" href="assets/css/components.css?v=93">
+    <link rel="stylesheet" href="assets/css/table.css?v=93">
 </head>
 <body>
     <div class="app">
         <header class="header">
             <div class="brand">
                 <span class="brand-dot"></span>
-                <h1>StemPlayer <small>Обработка</small></h1>
+                <h1>StemPlayer</h1>
             </div>
             <div class="header-tools">
                 <button class="btn btn-ghost btn-add" id="add-btn" type="button">+ Добавить треки</button>
@@ -41,7 +41,6 @@ PageGuard::enforce(RunState::ANALYSIS);
                     <a href="../stemgen/index.php" id="nav-stemgen">Стемы</a>
                 </nav>
             </div>
-            <div class="status-badge" id="status-badge" data-state="idle">idle</div>
         </header>
 
         <!-- Состояние 1: inbox пуст -> загрузка -->
@@ -75,10 +74,6 @@ PageGuard::enforce(RunState::ANALYSIS);
                     </div>
                     <div class="log-line" id="log-line" hidden></div>
                 </div>
-            </div>
-
-            <div class="banner" id="banner" hidden>
-                <span class="banner-text" id="banner-text"></span>
             </div>
 
             <div class="table-wrap">
@@ -126,8 +121,8 @@ PageGuard::enforce(RunState::ANALYSIS);
     <!-- Общее UI-ядро: бейдж статуса + блокировка ссылок в шапке.
          Классический скрипт, а не модуль: нужен и «Обработке» (ES-модули),
          и «Стемам» (window.StemGen), и выполняется раньше них. -->
-    <script src="assets/js/core/ui.js?v=80"></script>
-    <script src="assets/js/core/eq.js?v=80"></script>
-    <script type="module" src="assets/js/main.js?v=80"></script>
+    <script src="assets/js/core/ui.js?v=93"></script>
+    <script src="assets/js/core/eq.js?v=93"></script>
+    <script type="module" src="assets/js/main.js?v=93"></script>
 </body>
 </html>

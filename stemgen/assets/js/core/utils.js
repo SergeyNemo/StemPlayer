@@ -16,6 +16,23 @@
         return `${m}:${String(ss).padStart(2, '0')}`;
     };
 
+    // Имя файла для сохранения стема: имя трека «как есть» + вид стема.
+    // Трек приходит с расширением (StemRegistry отдаёт basename исходника, а
+    // для удалённых источников — original_name из meta.json), а в имени
+    // файла два расширения быть не должно, поэтому хвост отрезаем. Само имя
+    // не трогаем: пользователь должен получить файл, который узнаёт по
+    // названию трека, а не по нормализованной каше.
+    G.stemFileName = function stemFileName(trackName, kind) {
+        const base = String(trackName == null ? '' : trackName)
+            .replace(/\.[A-Za-z0-9]{1,5}$/, '') // хвост .mp3
+            .replace(/[\\/:*?"<>|]/g, '_')      // Windows такие символы в имени не берёт
+            .replace(/\s+/g, ' ')
+            .replace(/[ .]+$/, '')
+            .trim();
+
+        return `${base || 'track'}_${G.STEM_FILE_SUFFIX[kind] || 'stem'}.mp3`;
+    };
+
     // Ссылки в шапке блокирует общее ядро (analysis/assets/js/core/ui.js -
     // StemUI.createNav), чтобы «Обработка» и «Стемы» вели себя одинаково.
     // Здесь только правила этого модуля.

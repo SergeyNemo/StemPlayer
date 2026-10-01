@@ -76,7 +76,6 @@
    (current_stage_label) и меняется без перерисовки таблицы, поэтому текст
    не должен прыгать: фиксированная ширина не нужна, но перенос и
    выравнивание по центру - да. */
-.card-stage,
 .cell-stage {
     font-size: 11.5px; font-weight: 600; letter-spacing: .2px;
     color: var(--info); text-align: center;
@@ -264,6 +263,32 @@
     font-family: var(--mono); font-size: 11px; color: var(--info);
     letter-spacing: .5px; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+/* Иконка «сохранить стем» перед подписью. Глиф — по заглавной букве подписи
+   (11px моно): рядом с «Vocal» он читается как часть подписи, а не как ещё
+   одна кнопка; круглая кнопка того же размера, что play (30px), съела бы
+   строку целиком. Реальная <button> внутри панели-перемотки: клик гасится в
+   channel.js на pointerdown, иначе каждая попытка сохранить ещё и перематывала
+   бы трек. Отрицательный правый отступ поджимает gap строки (8px) до ~5px. */
+.chan-save {
+    display: inline-flex; align-items: center; justify-content: center;
+    flex: 0 0 auto;
+    width: 14px; height: 14px; padding: 0; margin: 0 -3px 0 0;
+    border: 0; border-radius: 4px; background: transparent;
+    color: var(--muted); cursor: pointer;
+    transition: color .15s ease, background-color .15s ease, transform .12s ease;
+}
+.chan-save .save-glyph { display: block; width: 11px; height: 11px; fill: currentColor; }
+.chan-save:hover:not(:disabled) { color: var(--info); background: rgba(255, 148, 56, .12); }
+.chan-save:active:not(:disabled) { transform: scale(.88); }
+.chan-save:focus-visible { outline: 1px solid var(--info); outline-offset: 1px; }
+.chan-save:disabled { opacity: .3; cursor: not-allowed; }
+/* Пока идёт сохранение — значок дышит: файл весит десятки мегабайт, и без
+   отклика кнопка выглядит зависшей. */
+.chan-save.is-busy .save-glyph { animation: chan-save-pulse .8s ease-in-out infinite; }
+@keyframes chan-save-pulse { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+    .chan-save.is-busy .save-glyph { animation: none; opacity: .6; }
 }
 .chan-time { text-align: right; margin-left: auto; }
 .chan-dur { text-align: left; }

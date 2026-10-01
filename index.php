@@ -38,7 +38,7 @@ $modules = [
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>StemPlayer — модули</title>
-<link rel="stylesheet" href="analysis/assets/css/base.css?v=3">
+<link rel="stylesheet" href="analysis/assets/css/base.css?v=93">
 <style>
     body { padding: 2rem; }
     .modules { display: grid; gap: 1rem; max-width: 720px; margin-top: 1.5rem; }

@@ -55,12 +55,6 @@
 
 @media (max-width: 1300px) {
     .header { flex-wrap: wrap; gap: 10px; }
-    /* Навигация — прямая ссылка (страница «Стемы»): на всякий случай держим
-       и старый селектор, и новый обёрточный — зависит от разметки страницы.
-       Брейкпоинт поднят до 1300px: при 1101–1300px приклеенная слева кнопка
-       «+ Добавить» начинала перекрывать заголовок (меню по центру, кнопка
-       уезжала в зону бренда). На этих ширинах шапка переносится на две
-       строки, и кнопка с меню встают в центре второй строки вместе. */
     .header > .nav { position: static; order: 3; width: 100%; justify-content: center; transform: none; }
     .header-tools {
         position: static; transform: none; order: 3; width: 100%;
@@ -69,11 +63,10 @@
     .header-tools .btn-add { position: static; transform: none; }
 }
 
-/* Телефон: шапка в три строки — заголовок, по центру бейдж статуса, ниже
-   меню. Бейдж стоит на своей строке ровно посередине, а не прижат вправо. */
 @media (max-width: 700px) {
     .header > .brand { flex: 1 0 100%; }
-    .status-badge { order: 2; margin: 0 auto; }
+    .header-tools { order: 2; flex: 1 1 auto; justify-content: center; }
+    .header > .nav { order: 3; }
 }
 
 .brand { display: flex; align-items: center; gap: 12px; }
@@ -83,34 +76,9 @@
     box-shadow: 0 0 12px var(--accent);
 }
 .brand h1 { font-size: 22px; font-weight: 700; letter-spacing: 0.5px; }
-.brand small { color: var(--muted); font-weight: 400; margin-left: 6px; }
-
-.status-badge {
-    padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 600;
-    border: 1px solid var(--panel-border); text-transform: uppercase; letter-spacing: 1px;
-    background: var(--panel); color: var(--muted);
-    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-    /* Ширина зафиксирована по самой длинной надписи («COMPLETE»): при смене
-       IDLE → RUNNING → COMPLETE бейдж не расширяется, и меню слева от него
-       не сдвигается ни на пиксель. */
-    min-width: 128px; text-align: center;
-}
-.status-badge::before {
-    content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted);
-}
-.status-badge[data-state="running"] { color: var(--info); border-color: var(--info); }
-.status-badge[data-state="running"]::before { background: var(--info); animation: blink 1s infinite; }
-.status-badge[data-state="complete"] { color: var(--success); border-color: var(--success); }
-.status-badge[data-state="complete"]::before { background: var(--success); }
-.status-badge[data-state="error"] { color: var(--error); border-color: var(--error); }
-.status-badge[data-state="error"]::before { background: var(--error); }
-.status-badge[data-state="stopped"] { color: var(--warning, #f5a623); border-color: var(--warning, #f5a623); }
-.status-badge[data-state="stopped"]::before { background: var(--warning, #f5a623); }
-
-.page-head h2 { font-size: 20px; color: var(--text); }
-.page-head p { color: var(--muted); font-size: 13.5px; margin-top: 4px; }
 
 /* ---------- Кнопки ---------- */
+
 .btn {
     padding: 11px 26px; border: none; border-radius: 10px; cursor: pointer;
     font-size: 14.5px; font-weight: 700; letter-spacing: 0.4px; transition: 0.15s ease;
@@ -129,10 +97,6 @@
 .btn-stop:hover:not(:disabled) { background: rgba(210, 153, 34, 0.12); }
 .btn-stop:disabled { opacity: 0.6; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.btn-link {
-    background: none; border: none; cursor: pointer;
-    color: var(--info); font-size: 13px; padding: 2px 6px;
-}
 /* Подтверждение необратимого действия — единственная красная кнопка в проекте. */
 .btn-danger { background: var(--error); color: #fff; }
 .btn-danger:hover:not(:disabled) { background: #ff6a63; transform: translateY(-1px); }

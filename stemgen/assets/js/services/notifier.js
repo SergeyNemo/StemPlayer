@@ -2,11 +2,6 @@
 (function (G) {
     const { els } = G;
 
-    // Бейдж статуса - общий код (StemUI.createBadge), тот же, что на
-    // странице «Обработка»: complete/error держим 3 секунды и тихо гасим
-    // в idle, иначе надпись «complete» висит вечно.
-    G.setBadge = window.StemUI.createBadge(els.statusBadge);
-
 
     // Индикатор работы демона без процентов: полоса ездит туда-сюда и сообщает
     // только «идёт генерация». Долей прогресса нет ни на диске, ни в UI.
@@ -17,24 +12,22 @@
     };
 
     // Это «журнал» — одна строка под прогрессбаром. Поведение живёт в общем
-    // ядре (StemUI.createLogLine), ровно как на странице «Обработка»: новая
-    // запись сменяет старую, а без новых строка сама исчезает через
-    // LOG_LIFE_MS. Раньше строка жила до следующего события — из-за этого на
-    // экране навсегда оставались «Загружено файлов: 1» и прочие сообщения
-    // о давних событиях. Подписи типа («OK», «ИНФО») в строке нет: тип виден
-    // по цвету, а сверху есть бейдж статуса.
+    // ядре (StemUI.createLogLine), ровно как на странице «Обработка».
+    // Одноразовые сообщения нашего UI (ошибка запуска, «генерация занята»,
+    // «демон не отвечает») гаснут сами через LOG_LIFE_MS, иначе на экране
+    // навсегда остаются сообщения о давних событиях. Подписи типа («OK»,
+    // «ИНФО») в строке нет: тип и так виден по цвету самой строки.
     const logLine = window.StemUI.createLogLine(els.logLine);
 
     G.appendLog = function appendLog(msg) {
-        logLine.append(String((msg && msg.type) || 'info').toLowerCase(), (msg && msg.message) || '');
-    };
-
-    G.hideLogLine = function hideLogLine() {
-        logLine.hide();
+        logLine.append(String((msg && msg.type) || 'info').toLowerCase(), (msg && msg.message) || '', { expire: true });
     };
 
     // Живая строка журнала: демон пишет в progress.json единственное поле
     // last_message, polling подхватывает его и показывает, пока не придёт новое.
+    // Строка этапа сама не гаснет: висит, пока следующий этап её не сменит, —
+    // иначе текст моргал бы и пропадал посреди генерации. Срок ей выдаёт
+    // logRunFinished() в конце прогона.
     let lastShownMessageKey = null;
 
     G.renderLogs = function renderLogs(entry) {
@@ -42,41 +35,21 @@
         const key = `${entry.time}|${entry.type}|${entry.message}`;
         if (key === lastShownMessageKey) return;
         lastShownMessageKey = key;
-        G.appendLog(entry);
+        logLine.append(String((entry.type || 'info').toLowerCase()), entry.message || '');
     };
 
-    let bannerTimer = null;
-
-    // Плавно показываем баннер, через 3 секунды плавно прячем.
-    G.showBanner = function showBanner(text) {
-        if (bannerTimer) {
-            clearTimeout(bannerTimer);
-            bannerTimer = null;
-        }
-
-        els.banner.textContent = '';
-        const span = document.createElement('span');
-        span.textContent = text;
-        els.banner.appendChild(span);
-        els.banner.hidden = false;
-
-        // Переход display:none -> flex нельзя анимировать сразу, ждём следующий кадр.
-        requestAnimationFrame(() => requestAnimationFrame(() => els.banner.classList.add('is-visible')));
-
-        bannerTimer = setTimeout(() => G.hideBanner(), 3000);
+    G.hideLogLine = function hideLogLine() {
+        logLine.hide();
     };
 
-    G.hideBanner = function hideBanner() {
-        if (bannerTimer) {
-            clearTimeout(bannerTimer);
-            bannerTimer = null;
-        }
-        els.banner.classList.remove('is-visible');
-        setTimeout(() => {
-            if (!els.banner.classList.contains('is-visible')) {
-                els.banner.hidden = true;
-                els.banner.textContent = '';
-            }
-        }, 350);
+    // Итог прогона. Индикатор статуса в шапке удалён, поэтому строка журнала —
+    // единственное место, где пользователь узнаёт о финале. Пишем сообщение
+    // демона из last_message, а не обезличенное «Готово», и гасим через
+    // LOG_FINAL_MS: раньше итог жил в бейдже и строкой не дублировался.
+    G.logRunFinished = function logRunFinished(entry, fallback) {
+        logLine.final(entry, fallback);
     };
+
+    // Баннер-хвост удалён вместе с разметкой: единственная текстовая подпись
+    // на странице — живая строка журнала под прогрессбаром.
 })(window.StemGen);

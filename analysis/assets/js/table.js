@@ -1,6 +1,6 @@
-import { state, els } from './store.js?v=80';
-import { buildPlayButton, bindSeek, applyPlaybackState, fmtMinSec } from './player.js?v=80';
-import { fmtDuration, buildNameNode, trashIcon } from './utils.js?v=80';
+import { state, els } from './store.js?v=93';
+import { buildPlayButton, bindSeek, applyPlaybackState, fmtMinSec } from './player.js?v=93';
+import { fmtDuration, buildNameNode, trashIcon } from './utils.js?v=93';
 
 // Число ступеней шкалы = ProgressStore::STAGES на сервере. Держим в одном
 // месте, чтобы ширина считалась от одного числа; порядок подписей сервер
@@ -312,7 +312,12 @@ function rowDone(name, result) {
     ref.keyCell.textContent = result.key || '—';
     ref.durCell.textContent = fmtDuration(result.duration);
 
-    if (state.mode !== 'processing' && state.mode !== 'poll') {
+    // Play разблокируется по тому же признаку, что и везде: кнопка «Обработать»
+    // скрыта (updateProcessUI) — все треки обработаны, играть можно. Пока
+    // кнопка на экране, остальные пути (updateProcessUI, syncPlayButtons) держат
+    // play заблокированным, и здесь тоже — иначе готовый трек разблокировался
+    // бы на середине прогона.
+    if (els.processBtn.hidden) {
         ref.playBtn.disabled = false;
         ref.playBtn.title = 'Играть / пауза';
     }
@@ -369,4 +374,4 @@ function rebuildRowIdle(ref, fast) {
     }, fast);
 }
 
-export { renderTable, updateSortInd, rowProcessing, setRowStage, rowQueued, rowDone, rowError, rebuildRowIdle, syncDeleteButtons };
+export { renderTable, rowProcessing, rowQueued, rowDone, rowError, rebuildRowIdle, syncDeleteButtons };

@@ -1,6 +1,6 @@
-import { els, state } from './store.js?v=80';
-import { fetchJson, appendLog, trashIcon } from './utils.js?v=80';
-import { switchToTracks, switchToUpload } from './views.js?v=80';
+import { els, state } from './store.js?v=93';
+import { fetchJson, appendLog, trashIcon } from './utils.js?v=93';
+import { switchToTracks, switchToUpload } from './views.js?v=93';
 
 // Трек, для которого открыта модалка: { name, btn }.
 let pending = null;

@@ -5,10 +5,15 @@
  *
  * Зачем он общий: «Обработка» и «Стемы» — это разные страницы одного
  * приложения, и поведение верхней панели у них обязано совпадать
- * (блокировка ссылок, статус-бейдж, лента прогресса). Раньше это было
- * написано дважды, и правки разъезжались: на «Стемах» ссылка
- * «Обработка» оставалась активной во время генерации, а на «Обработке»
- * кнопка «Стемы» не блокировалась по «нет готовых треков».
+ * (блокировка ссылок, строка журнала). Раньше это было написано дважды,
+ * и правки разъезжались: на «Стемах» ссылка «Обработка» оставалась
+ * активной во время генерации, а на «Обработке» кнопка «Стемы»
+ * не блокировалась по «нет готовых треков».
+ *
+ * Индикатора статуса в шапке (бейдж IDLE/RUNNING/COMPLETE) больше нет:
+ * он был вторым источником правды о прогоне, дублировал строку журнала и
+ * только мешал. Итог прогона теперь пишет сама строка журнала —
+ * см. final() в createLogLine.
  *
  * Подключается обычным <script> (не модуль) — модульные системы у
  * страниц разные (analysis на ES-модулях, stemgen на window.StemGen),
@@ -19,23 +24,23 @@
 window.StemUI = (function () {
     'use strict';
 
-    /** Сколько живёт терминальный статус в бейдже, потом тихо гаснет в idle. */
-    var BADGE_HOLD_MS = 3000;
-
-    /** Статусы, которые показываем ненадолго и потом возвращаем в idle. */
-    var HOLD_STATES = ['complete', 'error'];
-
     /**
-     * Сколько живёт строка журнала, пока не придёт следующая.
+     * Сколько живёт ОДНОРАЗОВОЕ сообщение журнала (загрузка файла, удаление
+     * трека, «сначала обработайте хотя бы один трек»).
      *
-     * Общая величина для обеих страниц. Раньше строки жили вечно: лента
-     * показывала последнюю запись и держала её, пока не случалось что-то
-     * ещё. Из-за этого на экране навсегда оставались «Загружено файлов: 1»,
-     * «Сначала обработайте хотя бы один трек», зелёные «Готово» и «… удалён»
-     * — сообщения о событиях, которые давно закончились. Теперь строка
-     * гаснет сама, а приход новой продлевает жизнь последней.
+     * Раньше строки жили вечно: лента показывала последнюю запись и держала
+     * её, пока не случалось что-то ещё. Из-за этого на экране навсегда
+     * оставались «Загружено файлов: 1», «Сначала обработайте хотя бы один
+     * трек», зелёные «Готово» и «… удалён» — сообщения о событиях, которые
+     * давно закончились. Такие строки гаснут сами.
      */
     var LOG_LIFE_MS = 4000;
+
+    /** Сколько живёт ПОСЛЕДНЯЯ строка прогона: этапы идут, строка меняется и
+     *  висит дальше (таймера у неё нет — иначе посреди работы демона текст
+     *  моргал бы и пропадал), а как прогон дошёл до последнего этапа, строка
+     *  ещё LOG_FINAL_MS напоминает о нём и гаснет. */
+    var LOG_FINAL_MS = 3000;
 
     /** Старая строка гаснет перед подменой, новая проявляется. */
     var LOG_SWAP_MS = 200;
@@ -52,24 +57,31 @@ window.StemUI = (function () {
      *
      * Правило поведения везде одинаковое:
      *   - новая запись сменяет старую (старая гаснет, новая проявляется);
-     *   - если новая не пришла за LOG_LIFE_MS, строка исчезает сама;
+     *   - строка этапа прогона держится ДО СЛЕДУЮЩЕГО этапа: таймера у неё
+     *     нет (append без expire), иначе посреди работы демона текст моргал
+     *     бы и пропадал на несколько секунд;
+     *   - последняя строка, когда прогон дошёл до конца, ещё LOG_FINAL_MS
+     *     висит и гаснет сама — это final();
+     *   - одноразовые сообщения (append с expire) гаснут через LOG_LIFE_MS;
      *   - hide() гасит немедленно и отменяет отложенную подмену, иначе
      *     строка, которую только что спрятали, успевала появиться снова
      *     (подмена срабатывает через 200 мс, скрытие ждёт 300 мс).
      *
      * Подписи типа («SUCCESS», «OK», «ИНФО», «ОШИБКА») в строке нет: тип и так
-     * виден по цвету самой строки, а слово занимало место и повторяло то, что
-     * уже показывает бейдж статуса в шапке. Сверху остаётся индикатор, внизу —
-     * сама строка журнала.
+     * виден по цвету самой строки, а слово занимало место и дублировало то,
+     * что показывает строка. Это единственная текстовая подпись о прогоне:
+     * индикатор статуса в шапке удалён.
      *
      * @param {HTMLElement|null} el элемент .log-line
-     * @param {{lifeMs?: number}} [opts]
-     * @returns {{append: (type: string, message: string) => void,
-     *            hide: () => void}}
+     * @param {{lifeMs?: number, finalMs?: number}} [opts]
+     * @returns {{append: (type: string, message: string, opts?: {expire?: boolean, expireMs?: number}) => void,
+     *            hide: () => void,
+     *            final: (entry: {message?: string, type?: string}|null, fallback: string) => void}}
      */
     function createLogLine(el, opts) {
         var cfg = opts || {};
         var lifeMs = cfg.lifeMs || LOG_LIFE_MS;
+        var finalMs = cfg.finalMs || LOG_FINAL_MS;
 
         var swapTimer = null;
         var lifeTimer = null;
@@ -110,96 +122,69 @@ window.StemUI = (function () {
             }, LOG_HIDE_MS);
         }
 
-        function armLife() {
-            if (lifeTimer !== null) clearTimeout(lifeTimer);
+        // ms = 0 — строка живёт до следующей (таймер снят).
+        function armLife(ms) {
+            if (lifeTimer !== null) { clearTimeout(lifeTimer); lifeTimer = null; }
+            if (!ms) return;
             lifeTimer = setTimeout(function () {
                 lifeTimer = null;
                 hide();
-            }, lifeMs);
+            }, ms);
         }
 
-        function append(type, message) {
+        function append(type, message, opts) {
             if (!el) return;
 
             var t = LOG_TYPES.indexOf(type) >= 0 ? type : 'info';
+            var o = opts || {};
+            var ms = o.expire ? (o.expireMs || lifeMs) : 0;
 
             if (swapTimer !== null) {
                 clearTimeout(swapTimer);
                 swapTimer = null;
             }
+            // Старый срок снимаем сразу, а не после подмены: подмена стоит
+            // 200 мс, и иначе гаснущая строка успела бы погасить и новую.
+            armLife(0);
 
             if (!el.hidden && el.classList.contains('is-show')) {
                 el.classList.remove('is-show');
                 swapTimer = setTimeout(function () {
                     swapTimer = null;
                     build(t, message);
-                    armLife();
+                    armLife(ms);
                 }, LOG_SWAP_MS);
             } else {
                 build(t, message);
-                armLife();
+                armLife(ms);
             }
         }
 
-        return { append: append, hide: hide };
-    }
-
-    // ---------------------------------------------------------------- бейдж
-
-    /**
-     * Бейдж статуса в шапке.
-     *
-     * Идея: после завершения прогона бейдж не должен навсегда висеть
-     * надписью COMPLETE - прогон давно закончился, и следующий щелчок
-     * «Обработать» всё равно начинает с чистого листа. Поэтому
-     * complete/error показываем 3 секунды, потом тихо гасим в idle.
-     *
-     * @param {HTMLElement|null} el
-     * @param {{holdMs?: number}} [opts]
-     * @returns {(status: string) => void}
-     */
-    function createBadge(el, opts) {
-        var holdMs = (opts && opts.holdMs) || BADGE_HOLD_MS;
-        var timer = null;
-        var shown = false;
-
-        function paint(status) {
+        /**
+         * Итог прогона. Раньше его показывал бейдж статуса в шапке
+         * (RUNNING -> COMPLETE -> IDLE), а строка молчала намеренно: бейдж был
+         * вторым источником правды об одном и том же событии. Индикатор убран,
+         * поэтому итог пишем здесь — и не «Готово», а реальным сообщением
+         * демона из last_message («Готово: обработано 3 из 3 файлов.»),
+         * иначе прогон сообщал бы о себе одной обезличенной подписью.
+         *
+         * Срок задаётся СРАЗУ в append(), а не отдельным expire() после неё:
+         * append() при подмене видимой строки строит новую через LOG_SWAP_MS и
+         * только там обнуляет срок, так что expire() поверх был бы стёрт
+         * через 200 мс и строка не погасла бы никогда.
+         *
+         * @param {{message?: string, type?: string}|null} entry last_message
+         * @param {string} fallback если демон не оставил сообщения
+         */
+        function final(entry, fallback) {
             if (!el) return;
-            var value = status === 'stopped' ? 'idle' : (status || 'idle');
-            el.dataset.state = value;
-            el.textContent = value.replace('_', ' ');
+            var e = entry || {};
+            var text = e.message || fallback || '';
+            if (!text) return;
+            append(e.type || 'success', text, { expire: true, expireMs: finalMs });
         }
 
-        function clear() {
-            if (timer !== null) {
-                clearTimeout(timer);
-                timer = null;
-            }
-        }
-
-        return function setBadge(status) {
-            var value = status === 'stopped' ? 'idle' : (status || 'idle');
-
-            if (HOLD_STATES.indexOf(value) === -1) {
-                clear();
-                shown = false;
-                paint(value);
-                return;
-            }
-
-            // Пока держим терминальный статус - повторные опросы (каждые
-            // 2 с) не должны перезапускать 3-секундный отсчёт заново.
-            if (shown) return;
-
-            shown = true;
-            paint(value);
-
-            timer = setTimeout(function () {
-                timer = null;
-                shown = false;
-                paint('idle');
-            }, holdMs);
-        };
+        return { append: append, hide: hide, final: final };
     }
 
     // ------------------------------------------------------------ навигация
@@ -292,10 +277,8 @@ window.StemUI = (function () {
     }
 
     return {
-        BADGE_HOLD_MS: BADGE_HOLD_MS,
-        HOLD_STATES: HOLD_STATES,
         LOG_LIFE_MS: LOG_LIFE_MS,
-        createBadge: createBadge,
+        LOG_FINAL_MS: LOG_FINAL_MS,
         createLogLine: createLogLine,
         lockNav: lockNav,
         createNav: createNav,

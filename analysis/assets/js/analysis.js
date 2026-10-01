@@ -1,9 +1,8 @@
-import { state, els, TERMINAL_STATES, POLL_INTERVAL } from './store.js?v=80';
-import { fetchJson, appendLog, renderLogs, setBadge, updateProcessUI, hideLogLine } from './utils.js?v=80';
-import { rowProcessing, rowQueued, rowDone, rowError, rebuildRowIdle, syncDeleteButtons } from './table.js?v=80';
-import { syncPlayButtons } from './player.js?v=80';
-import { hideBanner } from './views.js?v=80';
-import { refreshInbox } from './upload.js?v=80';
+import { state, els, TERMINAL_STATES, POLL_INTERVAL } from './store.js?v=93';
+import { fetchJson, appendLog, logRunFinished, renderLogs, updateProcessUI, hideLogLine } from './utils.js?v=93';
+import { rowProcessing, rowQueued, rowDone, rowError, rebuildRowIdle, syncDeleteButtons } from './table.js?v=93';
+import { syncPlayButtons } from './player.js?v=93';
+import { refreshInbox } from './upload.js?v=93';
 
 // Демон шлёт сердцебиение (last_ping) раз в 10 с, поэтому 120 с молчания —
 // это уже точно не работающий процесс.
@@ -23,7 +22,6 @@ function recoverDeadRun() {
     state.mode = 'idle';
     state.stopping = false;
     els.stopBtn.hidden = true;
-    setBadge('idle');
     updateProcessUI();
     syncPlayButtons();
     syncDeleteButtons();
@@ -31,13 +29,15 @@ function recoverDeadRun() {
     refreshInbox();
 }
 
-function finishProcessing(status) {
+// Финал неудачного старта. Отдельной строкой об ошибке: индикатор статуса
+// удалён, и если запуска не было, в журнале не появится ни одного записи
+// от демона — молчание читалось бы как «всё в порядке».
+function finishProcessing() {
     stopPolling();
-    state.mode = 'done';
+    state.mode = 'idle';
     state.stopping = false;
     els.stopBtn.hidden = true;
     updateProcessUI();
-    setBadge(status);
     syncPlayButtons();
     syncDeleteButtons();
 }
@@ -56,12 +56,8 @@ function startProcessing() {
 
     els.stopBtn.hidden = false;
     resetStopBtn();
-    hideBanner();
     hideLogLine();
-    setBadge('running');
     updateProcessUI();
-    const todo = state.rows.filter((r) => (r.status || 'pending') !== 'done').length;
-    appendLog({ time: '--:--:--', type: 'info', message: `Запускаю обработку (${todo || state.rows.length} трек(ов))…` });
 
     state.rowRefs.forEach((ref) => {
         ref.tr.classList.remove('row-done', 'row-error', 'row-processing');
@@ -138,7 +134,6 @@ function requestStop() {
     state.stopping = true;
     els.stopBtn.disabled = true;
     els.stopBtn.textContent = 'Останавливаем…';
-    setBadge('stopping');
 
     fetchJson('stop_analysis')
         .then((res) => {
@@ -147,7 +142,6 @@ function requestStop() {
                 appendLog({ time: '--:--:--', type: 'error', message: 'Сервер не ответил на запрос остановки.' });
             } else if (res.status === 'ok') {
                 // Дальше финал придёт опросом: он и сбросит кнопку.
-                appendLog({ time: '--:--:--', type: 'warning', message: 'Запрос остановки принят — ждём завершения текущего трека…' });
             } else if (res.status === 'idle') {
                 // Демон уже не работает: останавливать нечего. Честно говорим
                 // об этом и синхронизируем UI с фактическим состоянием.
@@ -199,13 +193,13 @@ function startPolling(launchAnalysis) {
                 appendLog({ time: '--:--:--', type: 'warning', message: res.message || 'Анализ уже выполняется.' });
             } else if (res.status === 'blocked') {
                 appendLog({ time: '--:--:--', type: 'error', message: res.message || 'Сейчас выполняется генерация стемов.' });
-                finishProcessing('idle');
+                finishProcessing();
             } else if (res.status === 'idle') {
                 appendLog({ time: '--:--:--', type: 'warning', message: res.message || 'Нет файлов для обработки.' });
-                finishProcessing('idle');
+                finishProcessing();
             } else if (res.status === 'error') {
                 appendLog({ time: '--:--:--', type: 'error', message: 'Не удалось запустить обработку.' });
-                finishProcessing('error');
+                finishProcessing();
             }
         }).catch(() => {});
     }
@@ -231,8 +225,8 @@ function pollProgress() {
             const status = progress.status || 'idle';
 
             // Демон ещё не проснулся — терминальный статус не наш. Молча ждём
-            // 'running' и не трогаем ни бейдж, ни журнал: иначе на экране
-            // мелькнёт зелёное «Готово» от старого прогона.
+            // 'running' и не трогаем журнал: иначе на экране мелькнёт зелёное
+            // «Готово» от старого прогона.
             if (state.awaitingRun && status !== 'running') {
                 if (Date.now() - state.launchedAt > LAUNCH_WAIT_MS) {
                     state.awaitingRun = false;
@@ -241,7 +235,7 @@ function pollProgress() {
                         type: 'error',
                         message: 'Демон не начал прогон за ' + Math.round(LAUNCH_WAIT_MS / 1000) + ' с — состояние сброшено, запустите заново.',
                     });
-                    finishProcessing('idle');
+                    finishProcessing();
                     refreshInbox();
                 }
                 return;
@@ -251,8 +245,6 @@ function pollProgress() {
                 state.awaitingRun = false;
             }
 
-            setBadge(status);
-            renderLogs(progress.last_message);
             updateProcessUI();
 
             if (status === 'running') {
@@ -261,6 +253,14 @@ function pollProgress() {
                     return;
                 }
                 state.sawRun = true;
+
+                // Живой журнал прогона — единственная текстовая подпись под
+                // прогрессбаром. Терминальные last_message («Готово: обработано
+                // 3 из 3 файлов.», «Остановлено: обработано…») сюда НЕ идут:
+                // это итог прошлого прогона, который держался в тулбаре часами
+                // и врал, будто работа идёт. Итог показываем один раз, когда
+                // прогон реально дошёл до конца, — см. logRunFinished ниже.
+                renderLogs(progress.last_message);
 
                 // Готовность треков сообщает демон (progress.done_files /
                 // progress.error_files) — по ходу прогона, с результатом.
@@ -305,7 +305,7 @@ function pollProgress() {
 
             // Run исчез: статус стал idle, хотя мы уже видели running (демон умер,
             // storage очистили, статус сброшен) — выходим из «зависшей» фазы,
-            // чтобы не висел индикатор работы и не мерцал «Идёт обработка».
+            // чтобы не мерцало «Идёт обработка» и не висела полоса.
             if (status === 'idle' && state.sawRun) {
                 recoverDeadRun();
                 return;
@@ -319,24 +319,16 @@ function pollProgress() {
                 // оставался true и следующая кнопка не реагировала.
                 resetStopBtn();
                 updateProcessUI();
-                const stopped = status === 'stopped';
-                const failed = status === 'error';
-                // Успешный финал строкой не дублируем: о прогоне и так говорит
-                // бейдж (RUNNING -> COMPLETE -> IDLE), а строка в тулбаре была
-                // вторым источником правды о том же событии — и он врал: она
-                // оставалась зелёной «SUCCESS Готово» спустя минуты после конца
-                // прогона и после новых событий. Прячем её, чтобы строка ушла
-                // вместе с последним сообщением демона.
-                // Остановку и ошибку по-прежнему объясняем словами: там бейдж
-                // молча гаснет в idle, и без строки непонятно, что случилось.
-                if (stopped || failed) {
-                    appendLog({
-                        time: '--:--:--',
-                        type: stopped ? 'warning' : 'error',
-                        message: stopped ? 'Остановлено' : 'Ошибка обработки — смотрите журнал',
-                    });
+                // Итог прогона. Индикатор статуса в шапке удалён, и раньше он
+                // был единственным местом, где пользователь узнавал о финале:
+                // строка молчала намеренно, чтобы не висеть зелёной «Готово»
+                // спустя минуты после конца. Теперь показываем итог ОДИН раз
+                // и на LOG_FINAL_MS, сообщением демона из last_message.
+                // Остановку не дублируем: пользователь инициировал её сам.
+                if (status === 'stopped') {
+                    logRunFinished(null, 'Остановлено');
                 } else {
-                    hideLogLine();
+                    logRunFinished(progress.last_message, 'Готово');
                 }
                 refreshInbox();
             }

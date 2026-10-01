@@ -4,7 +4,6 @@ const TERMINAL_STATES = new Set(['complete', 'error', 'stopped']);
 const $ = (selector) => document.querySelector(selector);
 
 const els = {
-    badge: $('#status-badge'),
     uploadZone: $('#upload-zone'),
     tracksView: $('#tracks-view'),
     dropzone: $('#dropzone'),
@@ -18,8 +17,6 @@ const els = {
     stopBtn: $('#stop-btn'),
     progressBar: $('#progress-bar'),
     overallProgress: $('#overall-progress'),
-    banner: $('#banner'),
-    bannerText: $('#banner-text'),
     tbody: $('#tracks-tbody'),
     logLine: $('#log-line'),
     stemsLink: $('#nav-stemgen'),
@@ -49,4 +46,4 @@ const state = {
 
 const api = { base: 'analysisApi.php' };
 
-export { POLL_INTERVAL, TERMINAL_STATES, $, els, state, api };
+export { POLL_INTERVAL, TERMINAL_STATES, els, state, api };

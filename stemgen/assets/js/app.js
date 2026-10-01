@@ -40,13 +40,8 @@
             return fetchJson('get_progress').then((p) => {
                 if (p.status !== 'running') return;
 
-                G.setBadge('running');
-                G.appendLog({
-                    time: '--:--:--',
-                    type: 'info',
-                    message: 'Обнаружена идущая генерация (другое окно или перезагрузка). Слежу за прогрессом, заново не запускаю.',
-                });
-
+                // Анонс «Обнаружена идущая генерация» не нужен: прогрессбар и
+                // живая строка журнала уже всё говорят сами.
                 startPolling(false);
             }).catch(() => {});
         })

@@ -1,4 +1,4 @@
-import { els, state, api } from './store.js?v=80';
+import { els, state, api } from './store.js?v=93';
 
 function fetchJson(action, options) {
     return fetch(`${api.base}?action=${encodeURIComponent(action)}`, { cache: 'no-store', ...(options || {}) })
@@ -16,30 +16,31 @@ function fmtDuration(sec) {
     return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
 }
 
-// Бейдж статуса и блокировка ссылок живут в общем ядре (core/ui.js), чтобы
-// «Обработка» и «Стемы» вели себя одинаково. Здесь только тонкая обёртка,
-// чтобы существующие вызовы setBadge() не пришлось переписывать.
+// Блокировка ссылок и строка журнала живут в общем ядре (core/ui.js), чтобы
+// «Обработка» и «Стемы» вели себя одинаково.
 const StemUI = window.StemUI;
 
 if (!StemUI) {
     throw new Error('Не загружено общее ядро assets/js/core/ui.js - подключи его в index.php до main.js');
 }
 
-// COMPLETE держим 3 секунды и возвращаем idle — иначе бейдж «залипает»
-// на комплите. Терминальный статус показывается один раз за запуск:
-// опрос раз в 2 с не должен постоянно перезапускать таймер.
-const setBadge = StemUI.createBadge(els.badge, { holdMs: StemUI.BADGE_HOLD_MS });
-
 // Это «журнал» — одна строка под прогрессбаром. Поведение живёт в общем ядре
-// (StemUI.createLogLine), чтобы «Обработка» и «Стемы» гасили строки одинаково:
-// новая запись сменяет старую, а без новых строка исчезает сама (LOG_LIFE_MS).
-// Подписи типа («SUCCESS», «INFO») в строке нет: тип виден по цвету самой
-// строки, а сверху в шапке есть индикатор статуса.
+// (StemUI.createLogLine), чтобы «Обработка» и «Стемы» гасили строки одинаково.
 const logLine = StemUI.createLogLine(els.logLine);
 
+// Одноразовое сообщение нашего UI (загрузка, удаление, «сначала обработайте
+// хотя бы один трек»): гаснет само через LOG_LIFE_MS — иначе на экране
+// навсегда остаются сообщения о давних событиях.
 function appendLog(entry) {
     const { type, message } = entry || {};
-    logLine.append(type, message || '');
+    logLine.append(type, message || '', { expire: true });
+}
+
+// Итог прогона. Индикатор статуса в шапке удалён, поэтому единственное
+// текстовое место, где пользователь узнаёт о финале, — эта строка. Пишем
+// сообщение демона из last_message, а не обезличенное «Готово».
+function logRunFinished(entry, fallback) {
+    logLine.final(entry, fallback);
 }
 
 function hideLogLine() {
@@ -51,12 +52,16 @@ let lastShownMessageKey = null;
 // Прогресс несёт только последнюю строку журнала (last_message) — показываем её,
 // если сообщение изменилось с прошлого опроса. Так строка под прогрессбаром
 // живая: Demucs/анализатор пишут в неё на каждом этапе, опрос подхватывает.
+// Строка этапа НЕ гаснет сама: висит, пока следующий этап её не сменит, —
+// иначе текст моргал бы и пропадал посреди работы демона. Срок ей выдаёт
+// logRunFinished() в конце прогона.
 function renderLogs(entry) {
     if (!entry || !entry.message) return;
     const key = `${entry.time}|${entry.type}|${entry.message}`;
     if (key === lastShownMessageKey) return;
     lastShownMessageKey = key;
-    appendLog(entry);
+    const { type, message } = entry;
+    logLine.append(type, message || '');
 }
 
 // Общая полоса прогресса прогона: без процентов, просто полоса ездит туда-сюда,
@@ -83,6 +88,19 @@ function updateProcessUI() {
     els.processBtn.title = blocked && !running ? 'Идёт генерация стемов — дождитесь завершения' : '';
     if (els.addBtn) els.addBtn.disabled = running;
     els.processBtn.hidden = allDone;
+    // Play едет на том же признаке, что и кнопка: пока «Обработать» на экране,
+    // все треки не обработаны — играть нельзя, а как только кнопка скрылась, все
+    // готовы и play разлочен (даже если прогон останавливали: mode там ещё
+    // какое-то время не idle, а кнопка уже hide). Синхронизируем здесь, в
+    // единственной точке, где меняется видимость кнопки, — иначе смены из
+    // views.js/analysis.js оставляли play в старом состоянии. То же правило
+    // продублировано в player.js:syncPlayButtons (там же вызывается после
+    // updateProcessUI) и в table.js:rowDone — условие одно: els.processBtn.hidden.
+    state.rowRefs.forEach((ref) => {
+        const done = ref.row.status === 'done';
+        ref.playBtn.disabled = !allDone || !done;
+        ref.playBtn.title = !allDone ? 'Обработка идёт' : done ? 'Играть / пауза' : 'Не обработан';
+    });
     showProgress(running);
     // Ссылки в шапке обновляем здесь же: это единственная точка, через
     // которую проходят ВСЕ смены состояния (views.js, analysis.js, upload.js).
@@ -180,4 +198,4 @@ function trashIcon() {
     return svg;
 }
 
-export { fetchJson, fmtDuration, trashIcon, setBadge, appendLog, renderLogs, showProgress, updateProcessUI, buildNameNode, hideLogLine, updateNav };
+export { fetchJson, fmtDuration, trashIcon, appendLog, logRunFinished, renderLogs, showProgress, updateProcessUI, buildNameNode, hideLogLine, updateNav };

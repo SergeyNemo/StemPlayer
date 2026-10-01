@@ -1,5 +1,5 @@
-import { state } from './store.js?v=80';
-import { renderTable } from './table.js?v=80';
+import { state } from './store.js?v=93';
+import { renderTable } from './table.js?v=93';
 
 // ---------- Сортировка по заголовкам колонок ----------
 
@@ -52,4 +52,4 @@ function shuffle(items) {
     return arr;
 }
 
-export { sortBy, shuffle };
+export { sortBy };
