@@ -79,5 +79,7 @@ $modules = [
             </a>
         <?php endforeach; ?>
     </nav>
+
+    <footer style="margin-top:2rem;padding-top:1.25rem;border-top:1px solid var(--panel-border);text-align:center;color:var(--muted);font-size:.85rem;">Made with <span style="color:var(--error);vertical-align:middle;">&#10084;&#65039;</span> by Sergey Nemo 2026</footer>
 </body>
 </html>

@@ -1,0 +1,5 @@
+# Зависимости модуля «Обработка» (analysis/).
+# Ставятся в системный Python: numpy + librosa (тянет numba, audioread) + mutagen.
+numpy
+librosa
+mutagen

@@ -70,6 +70,8 @@ PageGuard::enforce(RunState::STEMGEN);
                 </table>
             </div>
         </section>
+
+        <footer style="margin-top:8px;padding-top:18px;border-top:1px solid var(--panel-border);text-align:center;color:var(--muted);font-size:.85rem;">Made with <span style="color:var(--error);vertical-align:middle;">&#10084;&#65039;</span> by Sergey Nemo 2026</footer>
     </div>
 
     <!-- Общее UI-ядро (бейдж статуса + блокировка ссылок в шапке):

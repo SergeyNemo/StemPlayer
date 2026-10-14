@@ -1,0 +1,4 @@
+# Зависимости модуля «Стемы» (stemgen/).
+# Ставятся в venv_demucs. Сам torch/torchvision ставит setup.ps1
+# отдельно с нужным индексом (CUDA или CPU), поэтому здесь его нет.
+demucs

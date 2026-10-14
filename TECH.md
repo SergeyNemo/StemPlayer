@@ -614,7 +614,60 @@ curl -s "http://127.0.0.1/StemPlayer/stemgen/stemgenApi.php?action=get_tracks"
 
 ---
 
-## 10. Куда смотреть при правках
+## 10. Справочник конфигурации (`config.php`)
+
+| Константа | По умолчанию | Назначение |
+|---|---|---|
+| `STEMPLAYER_PYTHON` | `python` (или env) | Python для модуля «Обработка» |
+| `STEMPLAYER_PHP` | `C:/xampp/php/php.exe` (или env) | PHP для запуска CLI-демонов (под Apache `PHP_BINARY` = `httpd.exe`) |
+| `STEMPLAYER_MAX_EXEC_TIME` | `0` | Лимит времени long-running операций, сек (0 = без лимита) |
+| `STEMPLAYER_AUDIO_EXT` | 9 расширений | Какие файлы считать аудио |
+| `ANALYSIS_PROGRESS_FILE` | `storage/progress.json` | Файл состояния демона «Обработка» |
+| `STEMPLAYER_ANALYSIS_PAGE` | `analysis/index.php` | URL страницы «Обработка» (для блокировок и редиректов) |
+| `STEMPLAYER_STEMGEN_PAGE` | `stemgen/index.php` | URL страницы «Стемы» |
+| `STEMGEN_PYTHON` | `venv_demucs/Scripts/python.exe` (или env) | Python для Demucs (torch+CUDA+demucs) |
+| `STEMGEN_DEMUCS_MODEL` | `htdemucs` | Модель Demucs (4 стема: `vocals`, `drums`, `bass`, `other`) |
+| `STEMGEN_STEMS` | 4 стема | Имена стемов в порядке выхода |
+| `STEMGEN_MP3_BITRATE` | `320` | Битрейт mp3-стемов, kbps |
+| `STEMGEN_DELETE_SOURCE` | `true` | Удалять исходник из `music/sorted/` после успешного разделения |
+| `STEMGEN_PROGRESS_FILE` | `storage/stemgen_progress.json` | Файл состояния демона «Стемы» |
+
+Ключи `STEMPLAYER_*` / `STEMGEN_*` переопределяются одноимёнными переменными окружения. Лимиты загрузки — в `.htaccess` (`upload_max_filesize`, `post_max_size`, `max_file_uploads`, `max_execution_time`).
+
+## 11. Справочник API (actions)
+
+Все запросы — GET-параметром `action=…` (кроме загрузки — POST multipart).
+
+### Модуль «Обработка» — `analysis/analysisApi.php`
+
+| action | Метод | Назначение |
+|---|---|---|
+| `start_analysis` | GET | Поднять CLI-демон обработки. Ответы: `started`, `already_running`, `blocked`, `idle`, `error` |
+| `get_progress` | GET | Состояние `storage/progress.json` + флаг `stemgen_running` |
+| `get_folders` | GET | Дерево `music/sorted/` |
+| `get_inbox` | GET | Строки таблицы (файлы inbox + кэш результатов) + `stemgen_running` |
+| `upload` | POST | multipart, поле `files[]` — загрузка треков |
+| `stop_analysis` | GET | Запросить остановку текущего анализа |
+| `delete_track` | POST | form-поле `name` — удалить трек (Inbox + `music/sorted/` + стемы + `storage/`). Отказы: `blocked`, `error` |
+
+### Модуль «Стемы» — `stemgen/stemgenApi.php`
+
+| action | Метод | Назначение |
+|---|---|---|
+| `get_tracks` | GET | Все треки `music/sorted/` со статусом стемов (`id`, `done`, URL стемов) + `analysis_running` |
+| `start_generation` | GET | Поднять CLI-демон генерации. Ответы: `started`, `already_running`, `blocked`, `idle`, `error` |
+| `get_progress` | GET | Состояние `storage/stemgen_progress.json` + `analysis_running` |
+| `stop_generation` | GET | Запросить остановку очереди |
+
+Идентификатор трека: `ID = substr(md5(<имя файла> + BPM + Key), 0, 8)` (8 hex-цифр). Выход — `music/sorted/BPM…_Key…/{ID}/{ID}_{stem}.mp3` + `meta.json`. Любой путь обязан оставаться внутри `music/sorted/`.
+
+Пример загрузки:
+
+```
+curl -F "files[]=@track.mp3" "http://127.0.0.1/StemPlayer/analysis/analysisApi.php?action=upload"
+```
+
+## 12. Куда смотреть при правках
 
 | Хочется… | Идти в… |
 |---|---|
@@ -636,4 +689,4 @@ curl -s "http://127.0.0.1/StemPlayer/stemgen/stemgenApi.php?action=get_tracks"
 | Окружение Demucs | `venv_demucs/` (`STEMGEN_PYTHON`) + ffmpeg; правки — `config.php` |
 | Новый модуль | сначала ядро: `Http`/`ProgressStore`/`RunState`/`PageGuard`/`SpawnCli`/`PythonRunner`; затем папка модуля + `{модуль}Api.php` + `index.php` со стражем |
 
-Подробности для пользователя (установка, конфиг, API-таблицы) — в [README.md](README.md).
+Пользовательское описание и установка — в [README.md](README.md); справочники конфигурации и API — разделы 10–11 выше.
