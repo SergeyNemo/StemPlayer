@@ -4,8 +4,6 @@
 
 Бэкенд — PHP (XAMPP), вся обработка выполняется отдельными Python-процессами. **Версия 2.0.**
 
-> Архитектура, внутреннее устройство, API и все константы — в [TECH.md](TECH.md).
-
 ## Скриншот
 
 ![Интерфейс StemPlayer](assets/Screenshot_1.jpg)
@@ -89,7 +87,7 @@ venv_demucs\Scripts\python.exe -m pip install -r requirements-demucs.txt
 
 ## Структура
 
-Кратко: `index.php` (хаб) + `core/` (общее ядро) + модули `analysis/` и `stemgen/` + общие каталоги `music/` (треки) и `storage/` (состояние). Подробное дерево с назначением каждого файла — в [TECH.md, раздел 2](TECH.md).
+Кратко: `index.php` (хаб) + `core/` (общее ядро) + модули `analysis/` и `stemgen/` + общие каталоги `music/` (треки) и `storage/` (состояние).
 
 ## Телефон и планшет
 
@@ -99,6 +97,3 @@ venv_demucs\Scripts\python.exe -m pip install -r requirements-demucs.txt
 
 MIT © Sergey Nemo. Полный текст — в [LICENSE](LICENSE).
 
----
-
-Made with ❤️ by Sergey Nemo 2026
