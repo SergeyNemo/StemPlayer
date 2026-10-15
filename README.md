@@ -83,7 +83,7 @@ venv_demucs\Scripts\python.exe -m pip install -r requirements-demucs.txt
 
 ## Настройка
 
-Все параметры — в `config.php` (пути к Python/PHP, модель Demucs, битрейт, удаление исходника и т. д.). Полная таблица констант — в [TECH.md, раздел 10](TECH.md). Лимиты загрузки — в `.htaccess` (`upload_max_filesize`, `post_max_size`, `max_file_uploads`, `max_execution_time`).
+Все параметры — в `config.php` (пути к Python/PHP, модель Demucs, битрейт, удаление исходника и т. д.). 
 
 ## Структура
 
