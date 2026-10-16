@@ -6,21 +6,21 @@ window.StemGen = window.StemGen || {};
 (function (G) {
     G.API = 'stemgenApi.php';
     G.STEM_ORDER = ['other', 'vocals', 'bass', 'drums'];
-    // Каскадные стемы: появляются только после второго прохода (Music →
+    // Каскадные стемы: появляются только после второго прохода (Other →
     // Guitar/Piano) и рисуются в карточке лишь когда файлы реально есть.
     G.STEM_CASCADE_ORDER = ['guitar', 'piano'];
     G.STEM_NAMES = {
-        other: 'Музыка', vocals: 'Вокал', bass: 'Басс', drums: 'Ударные',
+        other: 'Other', vocals: 'Вокал', bass: 'Басс', drums: 'Ударные',
         guitar: 'Гитара', piano: 'Пиано',
     };
-    // Суффиксы сохраняемых файлов: other→music, vocals→vocal, bass→bass,
+    // Суффиксы сохраняемых файлов: other→other, vocals→vocal, bass→bass,
     // drums→drums, guitar→guitar, piano→piano. Ключи те же, что у STEM_ORDER,
     // а слова — НЕ как в подписи на экране (STEM_LABELS в ui/channel.js):
     // подпись можно переименовать когда угодно, а имя уже сохранённого файла
     // меняться не должно. Поэтому это отдельная карта, а не производная от
     // подписи.
     G.STEM_FILE_SUFFIX = {
-        other: 'music', vocals: 'vocal', bass: 'bass', drums: 'drums',
+        other: 'other', vocals: 'vocal', bass: 'bass', drums: 'drums',
         guitar: 'guitar', piano: 'piano',
     };
     G.TERMINAL = ['complete', 'error', 'stopped'];

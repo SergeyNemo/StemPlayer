@@ -27,7 +27,7 @@
                 return prev && prev.url === url && prev.rev === rev ? prev : new Stem(kind, url, rev);
             });
             this.stems = fresh;
-            // Флаг «каскад уже выполнен»: по нему канал Music прячет кнопку
+            // Флаг «каскад уже выполнен»: по нему канал Other прячет кнопку
             // «Разделить».
             this.cascadeReady = !!row.cascade_ready;
         }

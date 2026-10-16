@@ -112,10 +112,10 @@
         G.updateGenerateUI();
     }
 
-    // Каскадное разделение Music (other → guitar/piano) отдельным демоном.
+    // Каскадное разделение Other (other → guitar/piano) отдельным демоном.
     // Кнопка уходит в спиннер, а дальше работа идёт как обычный прогон: общий
     // опрос покажет прогресс/«Стоп»/живой журнал, а по финалу refreshTracks
-    // перерисует карточку — под Music появятся каналы Guitar и Piano.
+    // перерисует карточку — под Other появятся каналы Guitar и Piano.
     G.startCascade = function startCascade(id, channel) {
         if (state.locked) return;
 

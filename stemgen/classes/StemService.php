@@ -111,7 +111,7 @@ final class StemService implements StemGenInterface
     }
 
     /**
-     * Каскадное разделение готового стема (по умолчанию other/Music) на
+     * Каскадное разделение готового стема (по умолчанию other) на
      * guitar и piano через split_instrument.py (модель STEMGEN_CASCADE_MODEL).
      *
      * Второй проход модели: вход — {ID}_{stem}.mp3 в каталоге {ID}/, выход —

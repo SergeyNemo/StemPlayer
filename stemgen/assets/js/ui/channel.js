@@ -4,7 +4,7 @@
 
     // Подписи стемов на латинице (в строке канала, слева от времени).
     const STEM_LABELS = {
-        other: 'Music', vocals: 'Vocal', bass: 'Bass', drums: 'Drums',
+        other: 'Other', vocals: 'Vocal', bass: 'Bass', drums: 'Drums',
         guitar: 'Guitar', piano: 'Piano',
     };
 
@@ -69,9 +69,9 @@
         this.panel.append(this.specEl, trow);
 
         // Кнопка каскада — в левом НИЖНЕМ углу канала: зеркало верхнего
-        // левого угла (папка + подпись Music). Позиционируется абсолютно
+        // левого угла (папка + подпись Other). Позиционируется абсолютно
         // (см. .btn-cascade-split в CSS), поэтому строку времени не растит и
-        // не сдвигает. Только у Music, только когда стем на месте и трек ещё
+        // не сдвигает. Только у Other, только когда стем на месте и трек ещё
         // не разделён на guitar/piano.
         this.cascadeBtn = null;
 
@@ -80,8 +80,8 @@
             this.cascadeBtn.type = 'button';
             this.cascadeBtn.className = 'btn-cascade-split';
             this.cascadeBtn.textContent = 'Разделить (🎸/🎹)';
-            this.cascadeBtn.title = 'Разделить Music на гитару и пиано (модель htdemucs_6s)';
-            this.cascadeBtn.setAttribute('aria-label', 'Разделить Music на гитару и пиано');
+            this.cascadeBtn.title = 'Разделить Other на гитару и пиано (модель htdemucs_6s)';
+            this.cascadeBtn.setAttribute('aria-label', 'Разделить Other на гитару и пиано');
             // pointerdown гасим отдельно от click: панель канала ловит его
             // для перемотки (bindSeek), иначе клик по кнопке ещё и мотал бы.
             this.cascadeBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
@@ -164,7 +164,7 @@
         });
     }
 
-    // Каскадное разделение Music (other) на guitar/piano. Работу запускает
+    // Каскадное разделение Other (other) на guitar/piano. Работу запускает
     // отдельный демон, поэтому здесь только запрос и состояние кнопки —
     // прогресс и финал ведёт общий опрос (services/generation.js).
     splitInstrument(e) {

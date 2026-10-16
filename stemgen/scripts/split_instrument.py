@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""Каскадное разделение стема (Music/other) на guitar и piano через Demucs.
+"""Каскадное разделение стема (other) на guitar и piano через Demucs.
 
-Вход — уже готовый стем {ID}_other.mp3 (в интерфейсе подписан как Music).
+Вход — уже готовый стем {ID}_other.mp3 (в интерфейсе подписан как Other).
 Запускается python'ом из venv_demucs (torch+CUDA и demucs), модель 6s.
 
 В отличие от stem_splitter.py, который режет оригинал на 4 базовых стема,

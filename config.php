@@ -51,7 +51,7 @@ define('STEMGEN_DELETE_SOURCE', true);
 // Файл прогресса модуля «Стемы» (отдельно от анализа).
 define('STEMGEN_PROGRESS_FILE', __DIR__ . '/storage/stemgen_progress.json');
 
-// --- Каскадное разделение стема (Music/other → guitar/piano) ---
+// --- Каскадное разделение стема (Other → guitar/piano) ---
 
 // Модель второго прохода. htdemucs_6s — единственная модель Demucs, которая
 // отдаёт гитару и пиано отдельными стемами (4 базовых + guitar + piano).
@@ -63,7 +63,7 @@ define('STEMGEN_CASCADE_MODEL', getenv('STEMGEN_CASCADE_MODEL') ?: 'htdemucs_6s'
 define('STEMGEN_CASCADE_SHIFTS', getenv('STEMGEN_CASCADE_SHIFTS') ?: '3');
 define('STEMGEN_CASCADE_OVERLAP', getenv('STEMGEN_CASCADE_OVERLAP') ?: '0.5');
 
-// Исходный стем каскада (в интерфейсе подписан как Music) и то, что из него
+// Исходный стем каскада (в интерфейсе подписан как Other) и то, что из него
 // достаём. Порядок совпадает с ProgressStore::STEMGEN_CASCADE_STAGES и с
 // CASCADE_STEMS в split_instrument.py.
 define('STEMGEN_CASCADE_SOURCE_STEM', 'other');
