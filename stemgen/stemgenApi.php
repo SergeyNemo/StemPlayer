@@ -25,8 +25,6 @@ require_once __DIR__ . '/../core/PythonRunner.php';
 require_once __DIR__ . '/classes/StemGenInterface.php';
 require_once __DIR__ . '/classes/StemRegistry.php';
 require_once __DIR__ . '/classes/StemService.php';
-require_once __DIR__ . '/classes/StemRegistry.php';
-require_once __DIR__ . '/classes/StemService.php';
 
 // Long-running запросы не должны обрываться клиентом или сервером.
 ignore_user_abort(true);
