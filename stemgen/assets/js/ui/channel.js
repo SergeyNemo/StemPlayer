@@ -206,6 +206,11 @@
         let dragging = false;
 
         const seekTo = (e) => {
+            // Во время прогона (генерация/разделение) play заблокирован кнопкой
+            // «Сгенерировать» (G.playLocked). Панель канала — тот же play: клик
+            // по волне стартует/перематывает трек, поэтому и здесь молчим —
+            // иначе выходило «play-кнопки залочены, а клик по стему играет».
+            if (G.playLocked()) return;
             const rect = panel.getBoundingClientRect();
             if (!rect.width) return;
             const frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
@@ -214,6 +219,7 @@
 
         panel.addEventListener('pointerdown', (e) => {
             if (e.button !== 0) return;
+            if (G.playLocked()) return; // идёт прогон — перемотка запрещена
             e.preventDefault();
             dragging = true;
             try { panel.setPointerCapture(e.pointerId); } catch (err) { /* нет захвата */ }
