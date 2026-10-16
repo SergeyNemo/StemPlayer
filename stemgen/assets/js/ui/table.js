@@ -4,16 +4,36 @@
 
     // Каналы стемов в карточке трека. Подпись стема теперь живёт в самом
     // канале (слева от времени), поэтому отдельная колонка-бокс не нужна.
+    //
+    // Порядок: 4 базовых стема, а каскадные (guitar/piano) встают сразу ПОД
+    // Music — и только если файлы реально есть (иначе старые треки выглядели
+    // бы с пустыми каналами).
     G.buildChannelList = function buildChannelList(track, row) {
         const list = document.createElement('div');
         list.className = 'stem-list';
-        G.STEM_ORDER.forEach((stemKind) => {
+
+        const order = [];
+
+        G.STEM_ORDER.forEach((kind) => {
+            order.push(kind);
+
+            if (kind === 'other') {
+                (G.STEM_CASCADE_ORDER || []).forEach((ck) => {
+                    const cs = track.stems.find((s) => s.kind === ck);
+                    if (cs && cs.url) order.push(ck);
+                });
+            }
+        });
+
+        order.forEach((stemKind) => {
             const stem = track.stems.find((s) => s.kind === stemKind);
+            if (!stem) return;
             const key = `${track.id}/${stemKind}`;
             const ch = new Channel(track, stem);
             list.appendChild(ch.item);
             ui.set(key, { track, stem, ch });
         });
+
         return list;
     };
 
@@ -297,6 +317,18 @@
             const done = ref.done;
             ref.playBtn.disabled = locked || !done;
             ref.playBtn.title = locked ? 'Генерация идёт' : done ? 'Играть / пауза' : 'Стемов ещё нет';
+        });
+    };
+
+    // Кнопки каскада блокируем на время любого прогона (генерация/разделение —
+    // демон один) и на время собственного запроса канала. Вызывается из
+    // updateGenerateUI — единственной точки смены состояния прогона.
+    G.syncCascadeButtons = function syncCascadeButtons() {
+        const locked = !!state.generating || !!state.blocked;
+        ui.forEach((r) => {
+            if (r.ch && r.ch.cascadeBtn) {
+                r.ch.cascadeBtn.disabled = locked || !!r.ch.cascadeBusy;
+            }
         });
     };
 

@@ -290,6 +290,48 @@
 @media (prefers-reduced-motion: reduce) {
     .chan-save.is-busy .save-glyph { animation: none; opacity: .6; }
 }
+
+/* Кнопка «Разделить (🎸/🎹)»: в левом нижнем углу канала — зеркало верхнего
+   левого угла (папка + подпись Music). Позиционируется абсолютно по низу
+   панели, поэтому строку времени (она сверху) не растит и не сдвигает. */
+.btn-cascade-split {
+    position: absolute;
+    left: 9px; bottom: 8px; /* = padding .chan: 7px 12px 8px 9px */
+    z-index: 1;
+    appearance: none; -webkit-appearance: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 1px 6px; margin: 0; max-width: calc(100% - 18px);
+    font-family: var(--mono); font-size: 9px; line-height: 1.3;
+    letter-spacing: .3px; white-space: nowrap;
+    color: var(--info);
+    background: rgba(255, 148, 56, .08);
+    border: 1px solid rgba(255, 148, 56, .35);
+    border-radius: 5px;
+    cursor: pointer;
+    transition: color .15s ease, background-color .15s ease, border-color .15s ease,
+                box-shadow .15s ease, transform .12s ease;
+}
+.btn-cascade-split:hover:not(:disabled) {
+    color: #fff; border-color: var(--accent);
+    background: linear-gradient(to top, var(--accent), var(--info));
+    box-shadow: 0 0 8px rgba(255, 123, 0, .35);
+}
+.btn-cascade-split:active:not(:disabled) { transform: scale(.95); }
+.btn-cascade-split:disabled { opacity: .5; cursor: not-allowed; }
+.btn-cascade-split:focus-visible { outline: 1px solid var(--info); outline-offset: 1px; }
+/* Спиннер на время запроса: кнопка гаснет, рядом крутится индикатор. */
+.btn-cascade-split.is-loading { opacity: .85; }
+.btn-cascade-split.is-loading::before {
+    content: ''; flex: 0 0 auto;
+    width: 8px; height: 8px; margin-right: 4px;
+    border: 1.5px solid currentColor; border-top-color: transparent;
+    border-radius: 50%; animation: cascade-spin .7s linear infinite;
+}
+@keyframes cascade-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+    .btn-cascade-split.is-loading::before { animation: none; opacity: .7; }
+}
+
 .chan-time { text-align: right; margin-left: auto; }
 .chan-dur { text-align: left; }
 .chan-sep { color: var(--muted); font-size: 10.5px; }
@@ -376,6 +418,8 @@
     .track-card { padding: 10px; }
     .chan-right { flex-direction: row; gap: 8px; }
     .chan-eq { min-height: 44px; }
+    /* Кнопка каскада остаётся доступной и не наезжает на время. */
+    .btn-cascade-split { font-size: 8.5px; padding: 1px 5px; }
 }
 
 /* Тефон лежит на боку: ширина большая, высота — нет. Экономим вертикаль,

@@ -34,8 +34,10 @@ define('STEMPLAYER_STEMGEN_PAGE', 'stemgen/index.php');
 // Если не задан — используется STEMPLAYER_PYTHON.
 define('STEMGEN_PYTHON', getenv('STEMGEN_PYTHON') ?: (__DIR__ . '/venv_demucs/Scripts/python.exe'));
 
-// Модель Demucs. htdemucs даёт 4 стема: vocals, drums, bass, other.
-define('STEMGEN_DEMUCS_MODEL', getenv('STEMGEN_DEMUCS_MODEL') ?: 'htdemucs');
+// Модель Demucs. htdemucs_ft (fine-tuned) даёт те же 4 стема: vocals, drums,
+// bass, other, но чище разделяет низы (bass/drums). Это ансамбль из 4
+// дообученных моделей, они гонятся по очереди — медленнее, но точнее.
+define('STEMGEN_DEMUCS_MODEL', getenv('STEMGEN_DEMUCS_MODEL') ?: 'htdemucs_ft');
 
 // Имена стемов в порядке выхода демоуксика (без "no_vocals", which появляется при --two-stems).
 define('STEMGEN_STEMS', ['vocals', 'drums', 'bass', 'other']);
@@ -48,6 +50,29 @@ define('STEMGEN_DELETE_SOURCE', true);
 
 // Файл прогресса модуля «Стемы» (отдельно от анализа).
 define('STEMGEN_PROGRESS_FILE', __DIR__ . '/storage/stemgen_progress.json');
+
+// --- Каскадное разделение стема (Music/other → guitar/piano) ---
+
+// Модель второго прохода. htdemucs_6s — единственная модель Demucs, которая
+// отдаёт гитару и пиано отдельными стемами (4 базовых + guitar + piano).
+define('STEMGEN_CASCADE_MODEL', getenv('STEMGEN_CASCADE_MODEL') ?: 'htdemucs_6s');
+
+// Качество второго прохода (флаги Demucs, п.1): TTA-усреднение --shifts и
+// перекрытие сегментов --overlap. Больше значение — чище, но кратно дольше
+// (shifts множит время прогона). По умолчанию 3 / 0.5.
+define('STEMGEN_CASCADE_SHIFTS', getenv('STEMGEN_CASCADE_SHIFTS') ?: '3');
+define('STEMGEN_CASCADE_OVERLAP', getenv('STEMGEN_CASCADE_OVERLAP') ?: '0.5');
+
+// Исходный стем каскада (в интерфейсе подписан как Music) и то, что из него
+// достаём. Порядок совпадает с ProgressStore::STEMGEN_CASCADE_STAGES и с
+// CASCADE_STEMS в split_instrument.py.
+define('STEMGEN_CASCADE_SOURCE_STEM', 'other');
+define('STEMGEN_CASCADE_STEMS', ['guitar', 'piano']);
+
+// Файл-дескриптор запроса каскада: пишет API, читает и удаляет демон.
+// Демон запускается без аргументов (SpawnCli), поэтому «что делить» он
+// узнаёт из этого файла, как и принято в модуле (работа с диска).
+define('STEMGEN_CASCADE_REQUEST_FILE', __DIR__ . '/storage/cascade_request.json');
 
 if (STEMPLAYER_MAX_EXEC_TIME > 0) {
     set_time_limit(STEMPLAYER_MAX_EXEC_TIME);

@@ -3,7 +3,10 @@
     const { STEM_NAMES, LevelMeter, ensureSpec } = G;
 
     // Подписи стемов на латинице (в строке канала, слева от времени).
-    const STEM_LABELS = { other: 'Music', vocals: 'Vocal', bass: 'Bass', drums: 'Drums' };
+    const STEM_LABELS = {
+        other: 'Music', vocals: 'Vocal', bass: 'Bass', drums: 'Drums',
+        guitar: 'Guitar', piano: 'Piano',
+    };
 
     // Канал стема: UI-обвязка одного стема + его явные состояния.
     // state: 'off' (трек не играет) | 'active' (трек играет, канал слышен)
@@ -64,6 +67,27 @@
             trow.append(this.saveBtn, this.nameEl, this.timeEl, sep, this.durEl);
 
         this.panel.append(this.specEl, trow);
+
+        // Кнопка каскада — в левом НИЖНЕМ углу канала: зеркало верхнего
+        // левого угла (папка + подпись Music). Позиционируется абсолютно
+        // (см. .btn-cascade-split в CSS), поэтому строку времени не растит и
+        // не сдвигает. Только у Music, только когда стем на месте и трек ещё
+        // не разделён на guitar/piano.
+        this.cascadeBtn = null;
+
+        if (stem.kind === 'other' && stem.hasAudio && !track.cascadeReady) {
+            this.cascadeBtn = document.createElement('button');
+            this.cascadeBtn.type = 'button';
+            this.cascadeBtn.className = 'btn-cascade-split';
+            this.cascadeBtn.textContent = 'Разделить (🎸/🎹)';
+            this.cascadeBtn.title = 'Разделить Music на гитару и пиано (модель htdemucs_6s)';
+            this.cascadeBtn.setAttribute('aria-label', 'Разделить Music на гитару и пиано');
+            // pointerdown гасим отдельно от click: панель канала ловит его
+            // для перемотки (bindSeek), иначе клик по кнопке ещё и мотал бы.
+            this.cascadeBtn.addEventListener('pointerdown', (e) => e.stopPropagation());
+            this.cascadeBtn.addEventListener('click', (e) => this.splitInstrument(e));
+            this.panel.appendChild(this.cascadeBtn);
+        }
 
         // Отдельный элемент справа от канала: EQ + галка включения.
         this.right = document.createElement('div');
@@ -138,6 +162,25 @@
             this.saveBtn.classList.remove('is-busy');
             this.syncSaveBtn();
         });
+    }
+
+    // Каскадное разделение Music (other) на guitar/piano. Работу запускает
+    // отдельный демон, поэтому здесь только запрос и состояние кнопки —
+    // прогресс и финал ведёт общий опрос (services/generation.js).
+    splitInstrument(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (this.cascadeBusy || !this.cascadeBtn) return;
+        G.startCascade(this.track.id, this);
+    }
+
+    // Состояние кнопки каскада: «Разделение…» + спиннер, пока идёт запрос.
+    setCascadeBusy(busy) {
+        if (!this.cascadeBtn) return;
+        this.cascadeBusy = !!busy;
+        this.cascadeBtn.disabled = !!busy;
+        this.cascadeBtn.classList.toggle('is-loading', !!busy);
+        this.cascadeBtn.textContent = busy ? 'Разделение…' : 'Разделить (🎸/🎹)';
     }
 
     // Единая точка правки UI микса: галка, подпись процентов, вид канала.

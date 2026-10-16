@@ -8,7 +8,7 @@
       1. проверку Python 3.9+, ffmpeg и NVIDIA GPU (обязательно, минимум 6 ГБ VRAM);
       2. создание venv_demucs с torch (CUDA 12.1) и demucs;
       3. установку зависимостей анализатора (numpy, librosa, mutagen) в системный Python;
-      4. предварительную загрузку весов модели htdemucs;
+      4. предварительную загрузку весов моделей Demucs (htdemucs_ft, htdemucs_6s);
       5. создание рабочих каталогов music/ storage/ logs/.
 
     Требуется: Python 3.9+, ffmpeg, драйвер NVIDIA с рабочим nvidia-smi,
@@ -133,10 +133,10 @@ try {
     & $venvPy -m pip install -r (Join-Path $root 'requirements-demucs.txt')
     Assert-LastExit 'Установка demucs'
 
-    # --- 6. Веса модели --------------------------------------------------
-    Write-Step 'Загрузка весов модели htdemucs (может занять минуту)...'
-    & $venvPy -c "from demucs.pretrained import get_model; get_model('htdemucs'); print('htdemucs ready')"
-    Assert-LastExit 'Загрузка модели htdemucs'
+    # --- 6. Веса моделей --------------------------------------------------
+    Write-Step 'Загрузка весов моделей Demucs (htdemucs_ft, htdemucs_6s) — может занять несколько минут...'
+    & $venvPy -c "from demucs.pretrained import get_model; get_model('htdemucs_ft'); get_model('htdemucs_6s'); print('models ready')"
+    Assert-LastExit 'Загрузка моделей Demucs'
 
     # --- 7. Зависимости анализатора -------------------------------------
     Write-Step 'Установка зависимостей анализатора в системный Python (numpy, librosa, mutagen)...'

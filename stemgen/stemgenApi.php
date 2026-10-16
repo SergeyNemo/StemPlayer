@@ -10,6 +10,7 @@ declare(strict_types=1);
  *   stemgenApi.php?action=start_generation — запуск фоновой генерации стемов (CLI-демон, независим от страницы)
  *   stemgenApi.php?action=get_progress     — состояние демона из storage/stemgen_progress.json (+ analysis_running)
  *   stemgenApi.php?action=stop_generation  — запрос остановки очереди
+ *   stemgenApi.php?action=split_instrument — каскадное разделение стема (other → guitar/piano), id + stem
  *
  * Модуль работает только через CLI-демон и опрос состояния, поэтому синхронных
  * и SSE-действий здесь нет.
@@ -42,6 +43,7 @@ match ($action) {
     'start_generation' => handleStartGeneration($store, $flog),
     'get_progress'     => handleGetProgress($store),
     'stop_generation'  => handleStop($store, $flog),
+    'split_instrument' => handleSplitInstrument($store, $flog),
     default            => Http::jsonResponse(['status' => 'error', 'message' => 'Неизвестное действие: ' . $action]),
 };
 
@@ -143,4 +145,118 @@ function handleStop(ProgressStore $store, FileLog $flog): void
     $flog->write('info', 'Запрошена остановка генерации.');
     $store->requestStop();
     Http::jsonResponse(['status' => 'ok', 'stop_requested' => true]);
+}
+
+/**
+ * Каскадное разделение стема (other → guitar/piano) отдельным CLI-демоном.
+ *
+ * GET: id (8 hex-символов), stem (по умолчанию other).
+ *
+ * Ответ при успешном старте — {"status":"started"}: сам процесс идёт в фоне,
+ * страница следит за ним через get_progress (mode = "cascade"), как и за
+ * обычной генерацией.
+ */
+function handleSplitInstrument(ProgressStore $store, FileLog $flog): void
+{
+    $id   = (string) ($_GET['id'] ?? '');
+    $stem = (string) ($_GET['stem'] ?? STEMGEN_CASCADE_SOURCE_STEM);
+
+    if (!preg_match('/^[0-9a-f]{8}$/', $id)) {
+        Http::jsonResponse(['status' => 'error', 'message' => 'Некорректный ID трека.']);
+    }
+
+    if (!preg_match('/^[a-z_]+$/', $stem)) {
+        Http::jsonResponse(['status' => 'error', 'message' => 'Некорректный стем.']);
+    }
+
+    // Взаимная блокировка: каскад не запускаем, пока идёт генерация стемов
+    // (в т.ч. другой каскад) или обработка треков.
+    $state = $store->read();
+
+    if (($state['status'] ?? '') === 'running' && RunState::isFresh($state)) {
+        Http::jsonResponse(['status' => 'blocked', 'message' => 'Уже идёт разделение — дождитесь завершения.', 'started' => false]);
+    }
+
+    if (RunState::otherModuleRunning(RunState::STEMGEN)) {
+        Http::jsonResponse(['status' => 'blocked', 'message' => 'Сейчас идёт обработка треков — каскад запустите после её завершения.', 'started' => false]);
+    }
+
+    $registry = new StemRegistry();
+    $track    = $registry->findById($id);
+
+    if ($track === null) {
+        Http::jsonResponse(['status' => 'error', 'message' => 'Трек не найден: ' . $id]);
+    }
+
+    if (!is_file($track['dir'] . '/' . $id . '_' . $stem . '.mp3')) {
+        Http::jsonResponse(['status' => 'error', 'message' => 'Стем «' . $stem . '» не найден — сначала сгенерируйте стемы.']);
+    }
+
+    if ($registry->cascadeReady($track['folder'], $id)) {
+        Http::jsonResponse(['status' => 'already_done', 'message' => 'Трек уже разделён на guitar и piano.', 'started' => false]);
+    }
+
+    // Тот же старт-лок, что и у полной генерации: два демона не поднимутся разом.
+    $lockPath = __DIR__ . '/../storage/stemgen_start.lock';
+    $lock = @fopen($lockPath, 'c');
+
+    if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) {
+        Http::jsonResponse(['status' => 'already_running', 'message' => 'Разделение уже запускается.', 'started' => false]);
+    }
+
+    try {
+        // Дескриптор запроса пишем ДО спавна: демон без аргументов берёт
+        // задание отсюда и сразу удаляет файл.
+        $written = @file_put_contents(
+            STEMGEN_CASCADE_REQUEST_FILE,
+            json_encode(['id' => $id, 'stem' => $stem], JSON_UNESCAPED_UNICODE)
+        );
+
+        if ($written === false) {
+            Http::jsonResponse(['status' => 'error', 'message' => 'Не удалось записать запрос каскада.', 'started' => false]);
+        }
+
+        $spawnLog    = __DIR__ . '/../logs/spawn-cascade.log';
+        $beforeRunId = (string) ($store->read()['run_id'] ?? '');
+        $beforePing  = (int) ($store->read()['last_ping'] ?? 0);
+
+        $spawn = SpawnCli::spawn(__DIR__ . '/cli/cascade_cli.php', $spawnLog);
+
+        if (!$spawn['ok']) {
+            @unlink(STEMGEN_CASCADE_REQUEST_FILE);
+            $flog->write('error', 'Не удалось запустить демон каскада: ' . ($spawn['error'] ?? 'неизвестная причина'));
+            Http::jsonResponse(['status' => 'error', 'message' => $spawn['error'] ?? 'Не удалось запустить фоновый процесс.', 'started' => false]);
+        }
+
+        // Демон обязан подать признаки жизни в progress-файле (новый run_id).
+        $alive = false;
+
+        for ($i = 0; $i < 20; $i++) {
+            usleep(200_000);
+            $now = $store->readFresh();
+
+            if ((string) ($now['run_id'] ?? '') !== $beforeRunId
+                || (int) ($now['last_ping'] ?? 0) > $beforePing) {
+                $alive = true;
+                break;
+            }
+        }
+
+        if (!$alive) {
+            @unlink(STEMGEN_CASCADE_REQUEST_FILE);
+            $tail = SpawnCli::logTail($spawnLog);
+            $flog->write('error', 'Демон каскада не подал признаков жизни за 4 с.' . ($tail !== '' ? ' Вывод: ' . $tail : ' Лог демона пуст.'));
+            Http::jsonResponse([
+                'status'  => 'error',
+                'started' => false,
+                'message' => 'Фоновый процесс не запустился. ' . ($tail !== '' ? 'Вывод: ' . $tail : 'Смотри logs/spawn-cascade.log.'),
+            ]);
+        }
+    } finally {
+        flock($lock, LOCK_UN);
+        fclose($lock);
+    }
+
+    $flog->write('info', 'Запущено каскадное разделение ' . $id . ' (стем ' . $stem . ').');
+    Http::jsonResponse(['status' => 'started', 'message' => 'Каскадное разделение запущено.', 'started' => true, 'id' => $id]);
 }

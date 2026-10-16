@@ -53,6 +53,22 @@ final class ProgressStore
         'done'    => 'готово',
     ];
 
+    /**
+     * Этапы каскадного разделения стема (other → guitar/piano) — split_instrument.py.
+     *
+     * Отдельная карта: у второго прохода нет этапа «сборка стемов» (collect) —
+     * Demucs сразу кладёт guitar/piano, их только переносят. Порядок задаёт
+     * позицию на шкале, поэтому новый этап добавляется только сюда.
+     *
+     * @var array<string, string>
+     */
+    public const STEMGEN_CASCADE_STAGES = [
+        'load'   => 'подготовка',
+        'demucs' => 'разделение моделью',
+        'save'   => 'сохранение и проверка',
+        'done'   => 'готово',
+    ];
+
     private string $file;
 
     /** Состояние в памяти демона (после первого чтения/сброса). */

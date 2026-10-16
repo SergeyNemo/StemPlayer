@@ -16,6 +16,8 @@ final class StemService implements StemGenInterface
 {
     private const SCRIPT = __DIR__ . '/../scripts/stem_splitter.py';
 
+    private const SCRIPT_CASCADE = __DIR__ . '/../scripts/split_instrument.py';
+
     private StemRegistry $registry;
 
     public function __construct(?StemRegistry $registry = null)
@@ -106,6 +108,134 @@ final class StemService implements StemGenInterface
             'id'     => $id,
             'stems'  => $present,
         ];
+    }
+
+    /**
+     * Каскадное разделение готового стема (по умолчанию other/Music) на
+     * guitar и piano через split_instrument.py (модель STEMGEN_CASCADE_MODEL).
+     *
+     * Второй проход модели: вход — {ID}_{stem}.mp3 в каталоге {ID}/, выход —
+     * {ID}_guitar.mp3 и {ID}_piano.mp3 там же. Путь к каталогу ищется по ID
+     * (BPM…_Key…-папка API неизвестна).
+     *
+     * @param callable(): bool|null       $stopCheck
+     * @param callable(string): void|null $onStage
+     *
+     * @return array<string, mixed>
+     */
+    public function splitInstrument(
+        string $id,
+        string $stemName = STEMGEN_CASCADE_SOURCE_STEM,
+        ?callable $stopCheck = null,
+        ?callable $onStage = null
+    ): array {
+        if (!preg_match('/^[0-9a-f]{8}$/', $id)) {
+            return $this->error('ID каталога стемов некорректен: ' . $id);
+        }
+
+        // Имя стема идёт в путь — пускаем только безопасный токен.
+        if (!preg_match('/^[a-z_]+$/', $stemName)) {
+            return $this->error('Недопустимое имя стема: ' . $stemName);
+        }
+
+        $track = $this->registry->findById($id);
+
+        if ($track === null) {
+            return $this->error('Трек не найден: ' . $id);
+        }
+
+        $dir    = $track['dir'];
+        $folder = $track['folder'];
+
+        if ($this->registry->resolveInSorted($dir) === null) {
+            return $this->error('Каталог стемов вне music/sorted/: ' . $dir);
+        }
+
+        $inputFile = $dir . '/' . $id . '_' . $stemName . '.mp3';
+
+        if (!is_file($inputFile)) {
+            return $this->error('Стем для каскада не найден: ' . $inputFile);
+        }
+
+        $result = (new PythonRunner())->run(
+            self::SCRIPT_CASCADE,
+            [
+                $inputFile,
+                $dir,
+                $id,
+                STEMGEN_CASCADE_MODEL,
+                (string) STEMGEN_MP3_BITRATE,
+                (string) STEMGEN_CASCADE_SHIFTS,
+                (string) STEMGEN_CASCADE_OVERLAP,
+            ],
+            $stopCheck,
+            STEMGEN_PYTHON,
+            $onStage
+        );
+
+        if ($result['terminated'] || $result['exit_code'] === -1) {
+            return $this->error('Каскадное разделение прервано пользователем', $result['stderr']);
+        }
+
+        $data = $this->parseStdout($result['stdout']);
+
+        if ($result['exit_code'] !== 0 || $data === null || ($data['status'] ?? '') === 'error') {
+            $message = is_array($data) ? ($data['message'] ?? 'Неизвестная ошибка Demucs')
+                                      : 'Некорректный вывод split_instrument.py';
+            return $this->error($message, $result['stderr']);
+        }
+
+        $present = [];
+
+        foreach (STEMGEN_CASCADE_STEMS as $stem) {
+            if (is_file($dir . '/' . $id . '_' . $stem . '.mp3')) {
+                $present[] = $stem;
+            }
+        }
+
+        if (count($present) !== count(STEMGEN_CASCADE_STEMS)) {
+            return $this->error('Результат каскада неполный: ожидались guitar и piano в ' . $dir);
+        }
+
+        $this->writeCascadeMeta($dir, $present);
+
+        return [
+            'status' => 'done',
+            'id'     => $id,
+            'stems'  => $present,
+            'folder' => $folder,
+        ];
+    }
+
+    /**
+     * Помечает meta.json трека фактом каскада (cascade_done + список стемов).
+     *
+     * Мерджимся с существующим meta.json (его пишет stem_splitter.py), чтобы
+     * не потерять original_name/bpm/key/duration.
+     *
+     * @param list<string> $stems
+     */
+    private function writeCascadeMeta(string $dir, array $stems): void
+    {
+        $metaPath = $dir . '/meta.json';
+        $meta     = [];
+
+        if (is_file($metaPath)) {
+            $decoded = json_decode((string) file_get_contents($metaPath), true);
+
+            if (is_array($decoded)) {
+                $meta = $decoded;
+            }
+        }
+
+        $meta['cascade_done']       = true;
+        $meta['cascade_stems']      = $stems;
+        $meta['cascade_updated_at'] = date('c');
+
+        @file_put_contents(
+            $metaPath,
+            json_encode($meta, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+        );
     }
 
     /**

@@ -24,18 +24,22 @@
         const allDone = state.rows.length > 0 && state.rows.every((r) => r.done);
         const gen = !!state.generating;
         const blocked = !!state.blocked;
+        const cascade = gen && !!state.cascadeId;
         els.generateBtn.hidden = !gen && allDone && !blocked;
         els.generateBtn.disabled = gen || blocked;
         els.generateBtn.textContent = blocked && !gen
             ? 'Идёт обработка треков'
-            : gen
-                ? 'Идёт генерация'
-                : 'Сгенерировать стемы';
+            : cascade
+                ? 'Идёт разделение'
+                : gen
+                    ? 'Идёт генерация'
+                    : 'Сгенерировать стемы';
         els.generateBtn.title = blocked && !gen ? 'Запустите после завершения обработки' : '';
         // Видимость кнопки — признак «всё готово», по нему же разблокируется
         // play и решается судьба эквалайзера (table.css). Здесь он меняется, и
         // только здесь, поэтому дёргаем синхронизацию именно здесь.
         G.syncPlayButtons();
+        G.syncCascadeButtons();
         showProgress(gen);
         updateNav();
     };
@@ -102,10 +106,69 @@
         stopPolling();
         state.generating = false;
         state.launched = false;
+        state.cascadeId = null;
         G.resetStopBtn();
         els.stopBtn.hidden = true;
         G.updateGenerateUI();
     }
+
+    // Каскадное разделение Music (other → guitar/piano) отдельным демоном.
+    // Кнопка уходит в спиннер, а дальше работа идёт как обычный прогон: общий
+    // опрос покажет прогресс/«Стоп»/живой журнал, а по финалу refreshTracks
+    // перерисует карточку — под Music появятся каналы Guitar и Piano.
+    G.startCascade = function startCascade(id, channel) {
+        if (state.locked) return;
+
+        if (state.blocked) {
+            appendLog({ time: '--:--:--', type: 'error', message: 'Идёт обработка треков — разделение запустите после её завершения.' });
+            return;
+        }
+
+        if (state.generating) {
+            appendLog({ time: '--:--:--', type: 'warning', message: 'Уже идёт разделение — дождитесь завершения.' });
+            return;
+        }
+
+        if (channel) channel.setCascadeBusy(true);
+
+        fetchJson('split_instrument&id=' + encodeURIComponent(id) + '&stem=other')
+            .then((res) => {
+                if (!res) {
+                    if (channel) channel.setCascadeBusy(false);
+                    return;
+                }
+
+                if (res.status === 'started') {
+                    // Демон поднялся и уже пишет run_id (API дождался этого),
+                    // поэтому подключаем штатный опрос генерации.
+                    state.generating = true;
+                    state.cascadeId = id;
+                    state.awaitingRun = true;
+                    state.launchedAt = Date.now();
+                    els.stopBtn.hidden = false;
+                    resetStopBtn();
+                    G.hideLogLine();
+                    G.updateGenerateUI();
+                    G.startPolling(false);
+                    return;
+                }
+
+                if (channel) channel.setCascadeBusy(false);
+
+                appendLog({
+                    time: '--:--:--',
+                    type: res.status === 'error' ? 'error' : 'warning',
+                    message: res.message || 'Не удалось запустить разделение.',
+                });
+
+                // «Уже разделено» — экран разошёлся с сервером: перечитаем.
+                if (res.status === 'already_done') refreshTracks().catch(() => {});
+            })
+            .catch(() => {
+                if (channel) channel.setCascadeBusy(false);
+                appendLog({ time: '--:--:--', type: 'error', message: 'Не удалось связаться с сервером при запуске разделения.' });
+            });
+    };
 
     // Остановка с подтверждением: остановка прогона теперь откатывает всё,
     // что он создал (каталоги стемов), поэтому один клик без вопроса —
@@ -136,7 +199,13 @@
         if (Date.now() > stopArmedUntil) {
             stopArmedUntil = Date.now() + STOP_ARM_MS;
             els.stopBtn.textContent = 'Подтвердить';
-            appendLog({ time: '--:--:--', type: 'warning', message: 'Остановка удалит всё, что создал текущий прогон (каталоги стемов). Нажмите «Подтвердить».' });
+            appendLog({
+                time: '--:--:--',
+                type: 'warning',
+                message: state.cascadeId
+                    ? 'Остановка прервёт каскадное разделение — guitar/piano не будут созданы. Нажмите «Подтвердить».'
+                    : 'Остановка удалит всё, что создал текущий прогон (каталоги стемов). Нажмите «Подтвердить».',
+            });
 
             if (stopArmTimer !== null) clearTimeout(stopArmTimer);
             stopArmTimer = setTimeout(() => {
@@ -236,6 +305,7 @@
                         stopPolling();
                         state.generating = false;
                         state.launched = false;
+                        state.cascadeId = null;
                         G.resetStopBtn();
                         els.stopBtn.hidden = true;
                         G.updateGenerateUI();
@@ -277,6 +347,7 @@
                     lastWorkingName = null;
                     state.generating = false;
                     state.launched = false;
+                    state.cascadeId = null;
                     G.resetStopBtn();
                     els.stopBtn.hidden = true;
                     // Итог прогона. Индикатор статуса в шапке удалён, и раньше он

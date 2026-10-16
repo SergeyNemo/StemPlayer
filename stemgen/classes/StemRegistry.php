@@ -45,14 +45,15 @@ final class StemRegistry
                 $id   = $this->idFor($name, $parsed['bpm'], $key);
 
                 $rows[$id] = [
-                    'folder'      => $folder,
-                    'name'        => $name,
-                    'bpm'         => $parsed['bpm'],
-                    'key'         => $key,
-                    'id'          => $id,
-                    'done'        => $this->isDone($folder, $id),
-                    'stems'       => $this->stems($folder, $id),
-                    'stem_revs'   => $this->stemRevs($folder, $id),
+                    'folder'        => $folder,
+                    'name'          => $name,
+                    'bpm'           => $parsed['bpm'],
+                    'key'           => $key,
+                    'id'            => $id,
+                    'done'          => $this->isDone($folder, $id),
+                    'stems'         => $this->stems($folder, $id),
+                    'stem_revs'     => $this->stemRevs($folder, $id),
+                    'cascade_ready' => $this->cascadeReady($folder, $id),
                 ];
             }
 
@@ -69,14 +70,15 @@ final class StemRegistry
                 $name = (string) ($meta['original_name'] ?? '');
 
                 $rows[$id] = [
-                    'folder'      => $folder,
-                    'name'        => $name !== '' ? $name : ('Трек ' . $id),
-                    'bpm'         => $parsed['bpm'],
-                    'key'         => $key,
-                    'id'          => $id,
-                    'done'        => $this->isDone($folder, $id),
-                    'stems'       => $this->stems($folder, $id),
-                    'stem_revs'   => $this->stemRevs($folder, $id),
+                    'folder'        => $folder,
+                    'name'          => $name !== '' ? $name : ('Трек ' . $id),
+                    'bpm'           => $parsed['bpm'],
+                    'key'           => $key,
+                    'id'            => $id,
+                    'done'          => $this->isDone($folder, $id),
+                    'stems'         => $this->stems($folder, $id),
+                    'stem_revs'     => $this->stemRevs($folder, $id),
+                    'cascade_ready' => $this->cascadeReady($folder, $id),
                 ];
             }
         }
@@ -105,6 +107,9 @@ final class StemRegistry
     /**
      * URL каждого стема (null, если файла ещё нет). Ключи — имена стемов.
      *
+     * Кроме 4 базовых стемов сюда входят guitar/piano (каскад): их ключи
+     * присутствуют всегда, но URL — только когда файлы реально есть.
+     *
      * @return array<string, string|null>
      */
     public function stems(string $folder, string $id): array
@@ -112,7 +117,7 @@ final class StemRegistry
         $out  = [];
         $dir  = $this->stemDir($folder, $id);
 
-        foreach (STEMGEN_STEMS as $stem) {
+        foreach (array_merge(STEMGEN_STEMS, STEMGEN_CASCADE_STEMS) as $stem) {
             $file = $dir . '/' . $id . '_' . $stem . '.mp3';
             $out[$stem] = is_file($file) ? $this->stemUrl($folder, $id, $stem) : null;
         }
@@ -134,12 +139,56 @@ final class StemRegistry
         $out = [];
         $dir = $this->stemDir($folder, $id);
 
-        foreach (STEMGEN_STEMS as $stem) {
+        foreach (array_merge(STEMGEN_STEMS, STEMGEN_CASCADE_STEMS) as $stem) {
             $file = $dir . '/' . $id . '_' . $stem . '.mp3';
             $out[$stem] = is_file($file) ? (int) filemtime($file) : 0;
         }
 
         return $out;
+    }
+
+    /**
+     * Каскадные стемы (guitar/piano) готовы? Оба файла должны быть на диске.
+     *
+     * Флаг-надстройка над isDone(): базовый набор — это 4 стема, а каскад
+     * может быть выполнен или нет независимо от них.
+     */
+    public function cascadeReady(string $folder, string $id): bool
+    {
+        $dir = $this->stemDir($folder, $id);
+
+        foreach (STEMGEN_CASCADE_STEMS as $stem) {
+            if (!is_file($dir . '/' . $id . '_' . $stem . '.mp3')) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Трек по его 8-символьному ID (поиск каталога {ID}/ по всем папкам).
+     *
+     * Нужен каскаду: API получает только id, а путь к стемам ({ID}/) надо
+     * найти, не зная BPM…_Key…-папку.
+     *
+     * @return array{folder: string, id: string, dir: string}|null
+     */
+    public function findById(string $id): ?array
+    {
+        if (!preg_match('/^[0-9a-f]{8}$/', $id)) {
+            return null;
+        }
+
+        foreach ($this->sortedFolders() as $folder => $_) {
+            $dir = $this->stemDir($folder, $id);
+
+            if (is_dir($dir)) {
+                return ['folder' => $folder, 'id' => $id, 'dir' => $dir];
+            }
+        }
+
+        return null;
     }
 
     /**
