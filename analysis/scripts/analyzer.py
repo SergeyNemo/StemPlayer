@@ -90,11 +90,22 @@ def main() -> None:
         stage("meta")
         meta = read_metadata(path)
 
+        duration = meta["duration"]
+        if duration is None or duration <= 0:
+            analyzed_len = float(len(y) / sr)
+            if analyzed_len < (BPM_LOOKAHEAD_S - 1.0):
+                duration = round(analyzed_len, 2)
+            else:
+                try:
+                    duration = round(float(librosa.get_duration(path=path)), 2)
+                except Exception:
+                    duration = round(analyzed_len, 2)
+
         print(json.dumps({
             "status": "success",
             "bpm": int(round(float(bpm))),
             "key": key,
-            "duration": meta["duration"],
+            "duration": duration,
             "duration_analyzed": round(float(len(y) / sr), 2),
             "title": meta["title"],
             "artist": meta["artist"],

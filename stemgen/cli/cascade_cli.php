@@ -61,22 +61,33 @@ try {
         }
     );
 } catch (Throwable $e) {
+    cleanupCascadeTemp($id);
     $log->write('error', 'Фатальная ошибка каскада: ' . $e->getMessage());
     $store->update(['status' => 'error', 'finished_at' => date('c')]);
     exit(1);
 }
 
-// Этап 'done' ставим и здесь: скрипт мог упасть после последнего stage, а
-// результат всё равно проверен сервисом.
-$store->markStage('done', ProgressStore::STEMGEN_CASCADE_STAGES);
+$isStopped = $store->isStopRequested() || (($result['status'] ?? '') === 'error' && str_contains((string) ($result['message'] ?? ''), 'прерван'));
+
+if ($isStopped) {
+    cleanupCascadeTemp($id);
+    $store->update(['status' => 'stopped', 'finished_at' => date('c')]);
+    $store->log('warning', 'Каскадное разделение остановлено пользователем.');
+    $log->write('warning', 'Каскад остановлен пользователем (' . $id . ')');
+    exit(0);
+}
 
 if (($result['status'] ?? '') === 'error') {
+    cleanupCascadeTemp($id);
     $message = (string) ($result['message'] ?? 'Ошибка каскадного разделения');
     $store->log('error', $message);
     $store->update(['status' => 'error', 'processed' => 1, 'finished_at' => date('c')]);
     $log->write('error', $message . ' (' . $id . ')');
     exit(1);
 }
+
+// Этап 'done' ставим только при успешном завершении
+$store->markStage('done', ProgressStore::STEMGEN_CASCADE_STAGES);
 
 $stems = $result['stems'] ?? STEMGEN_CASCADE_STEMS;
 
@@ -88,6 +99,38 @@ $store->update([
 ]);
 
 $log->write('success', 'Каскад готов: ' . $id . ' (' . implode(', ', $stems) . ')');
+
+/**
+ * Очищает временный подкаталог _temp_cascade внутри папки трека при сбое/остановке.
+ */
+function cleanupCascadeTemp(string $id): void
+{
+    $track = (new StemRegistry())->findById($id);
+    if ($track === null) {
+        return;
+    }
+
+    $tempDir = $track['dir'] . DIRECTORY_SEPARATOR . '_temp_cascade';
+    if (is_dir($tempDir)) {
+        removeCascadeDirRecursive($tempDir);
+    }
+}
+
+function removeCascadeDirRecursive(string $dir): void
+{
+    foreach (scandir($dir) ?: [] as $entry) {
+        if ($entry === '.' || $entry === '..') {
+            continue;
+        }
+        $full = $dir . DIRECTORY_SEPARATOR . $entry;
+        if (is_dir($full)) {
+            removeCascadeDirRecursive($full);
+        } else {
+            @unlink($full);
+        }
+    }
+    @rmdir($dir);
+}
 
 /**
  * Читает и сразу удаляет файл-дескриптор запроса каскада.

@@ -50,7 +50,8 @@
             const rect = this.el.getBoundingClientRect();
             if (!rect.height) return;
             const y = rect.height - (e.clientY - rect.top);
-            this.setVolume(Math.round((y / rect.height) * 100) / 100);
+            const ratio = Math.max(0, Math.min(1, (y / rect.height) / 0.95));
+            this.setVolume(Math.round(ratio * 100) / 100);
         }
 
         // Любое изменение громкости идёт через Stem.setVolume: он же решает,
@@ -62,11 +63,12 @@
         }
 
         // «Ручка» громкости (нижняя заливка) + проценты над EQ.
-        // Высота — scaleY, а не height в %: бокс заливки равен боксу .chan-eq
-        // (top/bottom: 0 в CSS), поэтому 100% не может выйти за его край.
+        // Высота — scaleY с масштабом 0.95: при 100% громкости верхний отступ
+        // равен положению на 95% и идеально гармонирует с рамкой элемента.
         update() {
             const v = this.stem.volume;
-            this.fill.style.transform = `translateX(-50%) scaleY(${v})`;
+            const fillScale = v * 0.95;
+            this.fill.style.transform = `translateX(-50%) scaleY(${fillScale})`;
             this.pct.textContent = `${Math.round(v * 100)}%`;
         }
 

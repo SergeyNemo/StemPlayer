@@ -185,7 +185,7 @@ final class TrackCleaner
             return false;
         }
 
-        return strcasecmp(basename((string) $meta['original_name']), $name) === 0;
+        return mb_strtolower(basename((string) $meta['original_name']), 'UTF-8') === mb_strtolower($name, 'UTF-8');
     }
 
     private static function isEmptyDir(string $dir): bool

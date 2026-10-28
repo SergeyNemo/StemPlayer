@@ -81,6 +81,12 @@ function handleStartGeneration(ProgressStore $store, FileLog $flog): void
         Http::jsonResponse(['status' => 'idle', 'message' => 'Нет обработанных треков — генерацию запускать нечего.', 'started' => false]);
     }
 
+    $pending = array_filter($tracks, static fn (array $t): bool => empty($t['done']));
+
+    if ($pending === []) {
+        Http::jsonResponse(['status' => 'idle', 'message' => 'Все треки уже разделены на стемы.', 'started' => false]);
+    }
+
     $lockPath = __DIR__ . '/../storage/stemgen_start.lock';
     $lock = @fopen($lockPath, 'c');
 

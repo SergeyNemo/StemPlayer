@@ -353,7 +353,7 @@ final class ProgressStore
 
                 $files = array_values(array_filter(
                     $folder['files'],
-                    static fn ($file): bool => strcasecmp(basename((string) $file), $name) !== 0,
+                    static fn ($file): bool => mb_strtolower(basename((string) $file), 'UTF-8') !== mb_strtolower($name, 'UTF-8'),
                 ));
 
                 $removed = count($folder['files']) - count($files);
@@ -489,13 +489,19 @@ final class ProgressStore
 
         // Пишем во временный файл и атомарно переименовываем: читатели никогда
         // не увидят "обрезанный" JSON в момент записи (гандикап flock на чтение).
-        $tmp = $dir . '/progress.json.tmp';
+        // Имя tmp уникально для каждого файла и процесса, чтобы избежать коллизий
+        // между прогрессом анализа, стемов и параллельными вызовами.
+        $tmp = $this->file . '.' . getmypid() . '.' . bin2hex(random_bytes(4)) . '.tmp';
 
-        if (!@file_put_contents($tmp, json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE))) {
+        if (@file_put_contents($tmp, json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)) === false) {
             return;
         }
 
-        @rename($tmp, $this->file);
+        if (!@rename($tmp, $this->file)) {
+            @unlink($tmp);
+            return;
+        }
+
         $this->lastWriteAt = microtime(true);
     }
 

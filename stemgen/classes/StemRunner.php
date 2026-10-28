@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../core/ProgressStore.php';
 require_once __DIR__ . '/../../core/FileLog.php';
+require_once __DIR__ . '/../../core/RunState.php';
 require_once __DIR__ . '/StemService.php';
 require_once __DIR__ . '/StemRegistry.php';
 
@@ -54,8 +55,6 @@ final class StemRunner
         $runId = 'run_' . bin2hex(random_bytes(4));
         $log   = new FileLog(null, 'stemgen');
         $store->reset($runId);
-        $store->update(['total' => count($tracks), 'stop_requested' => false]);
-        $log->write('info', "Прогон {$runId}: генерация стемов, треков в очереди: " . count($tracks));
 
         if ($tracks === []) {
             $store->log('warning', 'В music/sorted/ нет треков для разделения.');
@@ -63,17 +62,43 @@ final class StemRunner
             return ['status' => 'idle', 'processed' => 0, 'total' => 0];
         }
 
+        // Фильтруем треки: обрабатываем только те, где стемы ещё не готовы
+        $pendingTracks = array_values(array_filter(
+            $tracks,
+            static fn (array $t): bool => empty($t['done'])
+        ));
+
+        if ($pendingTracks === []) {
+            $message = 'Все треки в библиотеке уже разделены на стемы.';
+            $store->log('info', $message);
+            $log->write('info', $message);
+            $store->update([
+                'status'       => 'complete',
+                'total'        => 0,
+                'processed'    => 0,
+                'folders'      => $this->registryDoneTrees($tracks),
+                'finished_at'  => date('c'),
+            ]);
+            return [
+                'status'    => 'complete',
+                'processed' => 0,
+                'total'     => 0,
+                'done'      => 0,
+                'errors'    => 0,
+                'skipped'   => count($tracks),
+                'run_id'    => $runId,
+            ];
+        }
+
+        $store->update(['total' => count($pendingTracks), 'stop_requested' => false]);
+        $log->write('info', "Прогон {$runId}: генерация стемов, треков в очереди: " . count($pendingTracks));
+
         $processed = 0;
         $doneCount = 0;
         $errorCount = 0;
-        $skipped = 0;
-        // Каталоги стемов, задетые ЭТИМ прогоном. При остановке всё это
-        // откатывается: прогон не завершился — значит, и его результат
-        // не должен остаться. Треки «уже готовые» (done) в список не
-        // попадают: они созданы прошлым прогоном и должны выжить.
         $runDirs = [];
 
-        foreach ($tracks as $track) {
+        foreach ($pendingTracks as $track) {
             if ($stopRequested = $this->stopRequested($store)) {
                 break;
             }
@@ -82,22 +107,13 @@ final class StemRunner
             $folder = (string) ($track['folder'] ?? '');
             $id     = (string) ($track['id'] ?? '');
 
-            if (!empty($track['done'])) {
-                $skipped++;
-                $store->log('info', 'Стемы уже готовы: ' . $name);
-                $log->write('info', 'Пропуск (уже готово): ' . $name);
-                continue;
-            }
-
             $runDirs[] = $this->registry->stemDir($folder, $id);
 
-            $store->update(['current_file' => $name]);
+            $store->update(['processed' => $processed, 'current_file' => $name]);
             $store->log('info', 'Генерация: ' . $name);
             $log->write('info', 'старт: ' . $name);
 
             // Этап 'load' шлёт сам скрипт (первая строка stdout), но подстрахуемся:
-            // если python не успел ничего вывести, карточка трека не останется
-            // без подписи и шкалы.
             $store->markStage('load', self::STAGES);
 
             $onStage = function (string $stage) use ($store): void {
@@ -132,11 +148,6 @@ final class StemRunner
             } else {
                 $doneCount++;
                 $stems = $result['stems'] ?? STEMGEN_STEMS;
-                // В ленту тулбара успех по треку не пишем: строка таблицы уже
-                // показывает «Сгенерировано», а надпись «Стемы готовы: … (vocals,
-                // bass, …)» была вторым источником правды об одном и том же
-                // и висела в тулбаре после генерации всех стемов. В файловый
-                // журнал запись остаётся — там она полезна.
                 $log->write('success', 'Стемы готовы: ' . $name . ' (' . implode(', ', $stems) . ')');
             }
 
@@ -148,10 +159,6 @@ final class StemRunner
         $status  = $stopped ? 'stopped' : 'complete';
 
         // Откат прерванного прогона: удаляем всё, что он создал за себя.
-        // Раньше убирался только каталог трека, который в этот момент рвался;
-        // успешно завершённые треки прогона оставались, хотя прогон целиком
-        // не состоялся. Исходники в music/sorted/ не трогаем — они принадлежат
-        // модулю «Обработка», а не стемам.
         if ($stopped) {
             $removed = $this->rollbackRunDirs($runDirs);
 
@@ -166,20 +173,24 @@ final class StemRunner
             'finished_at'  => date('c'),
         ]);
 
-        if ($status === 'stopped') {
-            $store->log('warning', 'Генерация остановлена пользователем.');
+        $message = $stopped
+            ? "Остановлено: обработано {$doneCount} из " . count($pendingTracks) . ' файлов.'
+            : "Генерация завершена: обработано {$doneCount} из " . count($pendingTracks) . ' файлов.';
+        $store->log($stopped ? 'warning' : 'info', $message);
+
+        if ($stopped) {
             $log->write('warning', 'Генерация остановлена пользователем.');
         } else {
-            $log->write('info', 'Генерация завершена: обработано ' . $processed . ', готово ' . $doneCount . ', ошибок ' . $errorCount . ', пропущено ' . $skipped . '.');
+            $log->write('info', $message . ' (ошибок: ' . $errorCount . ')');
         }
 
         $final = [
             'status'    => $status,
             'processed' => $processed,
-            'total'     => count($tracks),
+            'total'     => count($pendingTracks),
             'done'      => $doneCount,
             'errors'    => $errorCount,
-            'skipped'   => $skipped,
+            'skipped'   => count($tracks) - count($pendingTracks),
             'run_id'    => $runId,
         ];
 
@@ -257,37 +268,12 @@ final class StemRunner
             return false;
         }
 
-        // Живой процесс пишет last_ping каждой записью в progress-файл.
-        // Прогресс этапный (ступени), между записями бывают длинные паузы
-        // (демucs на трек) — 90 секунд без сердцебиения: процесс умер.
-        $ping = $state['last_ping'] ?? null;
-
-        if (is_numeric($ping)) {
-            if ((time() - (int) $ping) <= 90) {
-                return true;
-            }
-
-            $store->update(['status' => 'complete', 'finished_at' => date('c')]);
-            (new FileLog(null, 'stemgen'))->write('warning', 'Обнаружен зависший процесс (старый last_ping) — статус сброшен в complete.');
-
-            return false;
-        }
-
-        // Резерв для старых progress-файлов без last_ping: жив, если старт не старше 30 минут.
-        $started = (string) ($state['started_at'] ?? '');
-
-        if ($started === '') {
-            return true;
-        }
-
-        $ts = strtotime($started);
-        $fresh = $ts !== false && (time() - $ts) < 1800;
-
-        if ($fresh) {
+        if (RunState::isFresh($state)) {
             return true;
         }
 
         $store->update(['status' => 'complete', 'finished_at' => date('c')]);
+        (new FileLog(null, 'stemgen'))->write('warning', 'Обнаружен зависший процесс — статус сброшен в complete.');
 
         return false;
     }

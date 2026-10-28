@@ -117,16 +117,16 @@ final class AnalysisRunner
             $bpm = (string) ($result['bpm'] ?? '');
             $key = (string) ($result['key'] ?? '');
 
-            if ($bpm === '' || $key === '') {
+            if ($bpm === '' || (int) $bpm <= 0 || $key === '') {
                 if ($this->stopRequested($store)) {
                     $this->rollbackTrack($store, $tracks, $log, $name, $created);
                     break;
                 }
-                $msg = 'Анализ выполнен, но BPM/Key отсутствуют';
+                $msg = 'Анализ выполнен, но BPM/Key некорректны (тишина или ошибка темпа)';
                 $tracks->save($name, ['status' => 'error', 'message' => $msg, 'updated_at' => date('c')]);
                 $store->markError($name, $msg);
-                $store->log('error', $name . ': Проведён анализ, но BPM/Key отсутствуют.');
-                $log->write('error', $name . ': Проведён анализ, но BPM/Key отсутствуют.');
+                $store->log('error', $name . ': ' . $msg);
+                $log->write('error', $name . ': ' . $msg);
                 continue;
             }
 

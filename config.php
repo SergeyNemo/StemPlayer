@@ -77,3 +77,22 @@ define('STEMGEN_CASCADE_REQUEST_FILE', __DIR__ . '/storage/cascade_request.json'
 if (STEMPLAYER_MAX_EXEC_TIME > 0) {
     set_time_limit(STEMPLAYER_MAX_EXEC_TIME);
 }
+
+// Автозагрузка классов ядра и модулей (core/, analysis/classes/, stemgen/classes/)
+spl_autoload_register(static function (string $class): void {
+    static $dirs = [
+        __DIR__ . '/core/',
+        __DIR__ . '/analysis/classes/',
+        __DIR__ . '/stemgen/classes/',
+    ];
+
+    $file = str_replace('\\', '/', $class) . '.php';
+
+    foreach ($dirs as $dir) {
+        $path = $dir . $file;
+        if (is_file($path)) {
+            require_once $path;
+            return;
+        }
+    }
+});
