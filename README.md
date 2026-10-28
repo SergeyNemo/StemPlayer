@@ -6,7 +6,7 @@
 
 ## Скриншот
 
-![Интерфейс StemPlayer](assets/Screenshot_1.jpg)
+![Интерфейс StemPlayer](assets/StemPlayer.jpg)
 
 ## Возможности
 
