@@ -30,8 +30,7 @@ function openDeleteModal(name, btn) {
     pending = { name, btn };
     lastFocus = btn || document.activeElement;
 
-    // Имя файла — пользовательские данные, поэтому только textContent:
-    // innerHTML здесь дал бы треку возможность вписать свою разметку.
+    // Защита от XSS: вставка имени файла только через textContent:
     els.delName.textContent = name;
 
     els.delOverlay.hidden = false;

@@ -1,30 +1,7 @@
 'use strict';
 (function (G) {
-    // Сохранение одного стема на диск пользователя.
-    //
-    // Почему без PHP: стем уже лежит по статическому пути (StemRegistry::stemUrl
-    // отдаёт относительный ../music/sorted/…) и браузер его уже качает целиком
-    // для декодирования (Stem.load). Значит, чтобы отдать файл с нужным именем,
-    // достаточно забрать те же байты и записать их через File System Access API.
-    // Серверный экшен с Content-Disposition дал бы то же самое, но добавил бы в
-    // проект роутинг, файл-стример и проверку путей ради одной кнопки. Имя файла
-    // при этом задаёт клиент — а оно зависит от названия трека, которое клиент
-    // же и держит на экране.
-    //
-    // Почему showSaveFilePicker, а не <a download>: у anchor нет обратной связи
-    // от диалога. Браузер показывает «Сохранить как» и молчит — отменил
-    // пользователь или подтвердил, мы узнаём только по факту нажатия. Журнал
-    // писал «Сохранено: …» сразу после click, то есть врал на каждом отмене
-    // (а это половина открытий, и именно их видишь как «ничего не сохранилось»).
-    // showSaveFilePicker — тот же диалог, но он РЕШАЕТСЯ по факту сохранения:
-    // fulfilled → файл записан, AbortError → пользователь нажал «Отмена».
-    // Имя файла уходит в suggestedName, поэтому диалог сразу показывает
-    // «Artist - Song_vocal.mp3», а не выдуманное браузером имя.
-    //
-    // showSaveFilePicker есть только в Chromium (secure context) — Firefox и
-    // Safari им не поддерживают. Там остаётся anchor с download, и журнал
-    // честно пишет «Файл передан в загрузки», а не «Сохранено»: подтвердить
-    // запись без API нечем, и врать не нужно.
+    // Сохранение отдельного стема на диск через File System Access API
+    // (Chromium) с фолбэком на <a download> (Firefox / Safari).
     G.downloadStem = async function downloadStem(stem, trackName) {
         const fileName = G.stemFileName(trackName, stem && stem.kind);
         const kindName = (stem && G.STEM_NAMES[stem.kind]) || 'стем';
@@ -38,9 +15,8 @@
             return null;
         }
 
-        // Диалог открываем ДО сетевого запроса: pick() требует живого жеста
-        // пользователя (transient activation), который теряется после await.
-        // Побочный плюс — пользователь может отменить, не дожидаясь загрузки.
+        // Диалог открываем синхронно до сетевого запроса для сохранения
+        // контекста user gesture (transient activation).
         if (typeof window.showSaveFilePicker === 'function') {
             return saveThroughPicker(stem, fileName);
         }
@@ -58,8 +34,7 @@
                 types: [{ description: 'MP3', accept: { 'audio/mpeg': ['.mp3'] } }],
             });
         } catch (err) {
-            // AbortError — штатная отмена, не ошибка. Молча уходим: пользователь
-            // сам сказал «не надо», журнал об этом сообщать незачем.
+            // AbortError — отмена, не ошибка.
             if (err && err.name === 'AbortError') return null;
             G.appendLog({
                 time: '--:--:--',

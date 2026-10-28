@@ -67,13 +67,13 @@ try {
     exit(1);
 }
 
-$isStopped = $store->isStopRequested() || (($result['status'] ?? '') === 'error' && str_contains((string) ($result['message'] ?? ''), 'прерван'));
+$isStopped = $store->isStopRequested() || (($result['status'] ?? '') === 'error' && (str_contains((string) ($result['message'] ?? ''), 'остановлен') || str_contains((string) ($result['message'] ?? ''), 'прерван')));
 
 if ($isStopped) {
     cleanupCascadeTemp($id);
     $store->update(['status' => 'stopped', 'finished_at' => date('c')]);
-    $store->log('warning', 'Каскадное разделение остановлено пользователем.');
-    $log->write('warning', 'Каскад остановлен пользователем (' . $id . ')');
+    $store->log('warning', 'Каскадное разделение остановлено.');
+    $log->write('warning', 'Каскад остановлен (' . $id . ')');
     exit(0);
 }
 

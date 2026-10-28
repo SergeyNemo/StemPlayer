@@ -25,7 +25,7 @@ final class AnalysisService implements AnalysisInterface
         $result = (new PythonRunner())->run(self::SCRIPT, [$filePath], $stopCheck, '', $onStage);
 
         if ($result['terminated'] || $result['exit_code'] === -1) {
-            return $this->error('Анализ прерван пользователем', $result['stderr']);
+            return $this->error('Анализ остановлен', $result['stderr']);
         }
 
         $data = $this->parseStdout($result['stdout']);

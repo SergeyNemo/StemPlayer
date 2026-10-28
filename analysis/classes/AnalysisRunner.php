@@ -157,8 +157,7 @@ final class AnalysisRunner
             }
 
             // Стоп мог прийти прямо во время перекладывания. Трек, который
-            // не успел дописать результат, откатываем целиком — как и просил
-            // пользователь: «всё, что связано со вторым треком».
+            // не успел завершить обработку, откатываем целиком.
             if ($this->stopRequested($store)) {
                 $this->rollbackTrack($store, $tracks, $log, $name, $created);
                 break;
@@ -220,7 +219,7 @@ final class AnalysisRunner
         $store->log('info', $message);
 
         if ($stopped) {
-            $log->write('warning', 'Прогон остановлен пользователем.');
+            $log->write('warning', 'Прогон остановлен.');
         }
 
         $log->write('info', "Итог прогона: {$message}");
@@ -242,7 +241,7 @@ final class AnalysisRunner
      * music/sorted/, каталог {id}/ с meta.json, запись в storage/tracks.json
      * и отметку в состоянии прогона. Ранее готовые треки не трогаем — их
      * делал другой прогон. Исходник в inbox/ остаётся: он не копия, а
-     * исходный файл пользователя, и без него трек не переанализировать.
+     * исходный файл, необходимый для повторного анализа.
      *
      * @param array{copy?: string, copyExisted?: bool, metaDir?: string, metaDirNew?: bool, metaFile?: string, metaFileNew?: bool} $created
      */

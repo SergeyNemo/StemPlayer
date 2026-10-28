@@ -179,7 +179,7 @@ final class StemRunner
         $store->log($stopped ? 'warning' : 'info', $message);
 
         if ($stopped) {
-            $log->write('warning', 'Генерация остановлена пользователем.');
+            $log->write('warning', 'Генерация остановлена.');
         } else {
             $log->write('info', $message . ' (ошибок: ' . $errorCount . ')');
         }

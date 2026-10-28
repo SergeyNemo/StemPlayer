@@ -70,7 +70,7 @@ final class StemService implements StemGenInterface
         );
 
         if ($result['terminated'] || $result['exit_code'] === -1) {
-            return $this->error('Разделение прервано пользователем', $result['stderr']);
+            return $this->error('Разделение остановлено', $result['stderr']);
         }
 
         $data = $this->parseStdout($result['stdout']);
@@ -174,7 +174,7 @@ final class StemService implements StemGenInterface
         );
 
         if ($result['terminated'] || $result['exit_code'] === -1) {
-            return $this->error('Каскадное разделение прервано пользователем', $result['stderr']);
+            return $this->error('Каскадное разделение остановлено', $result['stderr']);
         }
 
         $data = $this->parseStdout($result['stdout']);
